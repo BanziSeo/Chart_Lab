@@ -203,6 +203,14 @@ if df_price is None:
 ind_df = add_indicators(df_price, mas_tuple).iloc[: g.idx + 1]
 price_now = ind_df.Close.iloc[-1]
 
+if g.pos is not None:
+    pos_val = abs(g.pos.qty * price_now)
+    pct_equity = pos_val / g.equity * 100 if g.equity else 0.0
+    side_col.markdown(
+        f"**Position:** {g.pos.side} {g.pos.qty} @ {g.pos.entry:.2f} "
+        f"({pct_equity:.2f}% of equity)"
+    )
+
 # --- view window len
 if "view_n" not in st.session_state:
     st.session_state.view_n = 120
