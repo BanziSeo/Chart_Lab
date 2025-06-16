@@ -243,6 +243,7 @@ fig = make_subplots(
     vertical_spacing=0.03,
     row_heights=[0.7, 0.3],
 )
+fig.update_yaxes(fixedrange=True, row=1, col=1)
 
 fig.add_trace(
     go.Candlestick(
