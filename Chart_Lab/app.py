@@ -59,11 +59,20 @@ def start_random_modelbook(capital: int):
     if not os.path.exists(mb):
         st.error("modelbook.txt 파일을 찾지 못했습니다.")
         return
-    tickers = load_modelbook(mb)
+
+    # ① 모델북 읽기
+    tickers = load_modelbook(mb)          # 이미 strip, upper 처리됨
+
+    # ② 유효한 알파벳 티커만 필터
+    tickers = [t for t in tickers if t.isalpha()]
+
     if not tickers:
-        st.error("modelbook.txt 에 티커가 없습니다.")
+        st.error("modelbook.txt 에 유효한 티커가 없습니다.")
         return
+
+    # ③ 시작
     start_game(random.choice(tickers), capital)
+
 
 
 def jump_random_date():
