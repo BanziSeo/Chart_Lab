@@ -1,7 +1,6 @@
-# app.py (Ver. 3.2)
-# 기능: 1. 게임당 최대 캔들 80개 제한 기능 추가.
-#      2. 결과 분석 시 시작 연도 표시 기능 추가.
-#      3. 코드 안정성을 위해 GameState, Position 클래스를 파일 내에 포함.
+# app.py (Ver. 3.3)
+# 기능: 1. '날짜 변경' 또는 '다음' 클릭 시, 표시 캔들 수 등 사용자 설정이 초기화되지 않도록 수정.
+#      2. 차트 설정은 새로운 게임 시작 시에만 초기화됨.
 
 import streamlit as st
 import pandas as pd
@@ -16,7 +15,7 @@ from services.indicators import add_mas
 # from services.simulator import GameState, Position # 이제 이 파일에서 직접 관리합니다.
 
 # ------------------------------ Streamlit 페이지 설정 ------------------------------
-st.set_page_config(page_title="차트 훈련소", page_icon="📈", layout="wide")
+st.set_page_config(page_title="차트 훈련소", page_icon=" ", layout="wide")
 
 # ----------------------------------- 상수 정의 -----------------------------------
 PAD, MARGIN = 20, 0.05
@@ -188,7 +187,9 @@ def jump_random_date():
         g.start_idx = g.idx # 시작점 재설정
         g.start_date = g.df.index[g.start_idx]
         g.cash, g.pos, g.log = g.initial_cash, None, []
-        reset_session_state()
+        
+        # ✨ 기능 개선: 사용자 설정(표시봉, 차트 높이 등)은 유지하고 게임 관련 상태만 초기화
+        st.session_state.stop_loss_price = 0.0
         st.rerun()
 
 # --------------------------------- 첫 랜딩 페이지 ---------------------------------
@@ -373,3 +374,4 @@ with chart_col:
     fig.update_yaxes(range=price_yrange, row=1, col=1)
     fig.update_yaxes(range=volume_yrange, row=2, col=1)
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+ 
