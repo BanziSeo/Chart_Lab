@@ -201,6 +201,9 @@ if df_price is None:
 ind_df = add_indicators(df_price, mas_tuple).iloc[: g.idx + 1]
 price_now = ind_df.Close.iloc[-1]
 
+# --- current equity metric
+side_col.metric("총 자산($)", f"{g.equity:,.0f}")
+
 # --- view window len
 if "view_n" not in st.session_state:
     st.session_state.view_n = 120
