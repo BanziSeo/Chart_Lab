@@ -260,20 +260,42 @@ fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
 
 chart_col.plotly_chart(fig, use_container_width=True)
 
-qty = side_col.number_input("수량", 1, 1000, 1)
-btn_buy, btn_sell, btn_flat = side_col.columns(3)
-
-if btn_buy.button("매수", use_container_width=True):
-    g.buy(int(qty))
+def order_pct(side: str, pct: float) -> None:
+    """Execute order for percentage of current buying power."""
+    price = g.df.Close.iloc[g.idx]
+    qty = int(g.cash / price * pct)
+    if qty <= 0:
+        st.warning("주문 수량이 0입니다.")
+        return
+    if side == "buy":
+        g.buy(qty)
+    else:
+        g.sell(qty)
     g.idx += 1
     st.rerun()
 
-if btn_sell.button("매도", use_container_width=True):
-    g.sell(int(qty))
-    g.idx += 1
-    st.rerun()
+buy25, buy50, buy100 = side_col.columns(3)
+sell25, sell50, sell100 = side_col.columns(3)
 
-if btn_flat.button("청산", use_container_width=True):
+if buy25.button("매수 25%", use_container_width=True):
+    order_pct("buy", 0.25)
+
+if buy50.button("매수 50%", use_container_width=True):
+    order_pct("buy", 0.5)
+
+if buy100.button("매수 100%", use_container_width=True):
+    order_pct("buy", 1.0)
+
+if sell25.button("매도 25%", use_container_width=True):
+    order_pct("sell", 0.25)
+
+if sell50.button("매도 50%", use_container_width=True):
+    order_pct("sell", 0.5)
+
+if sell100.button("매도 100%", use_container_width=True):
+    order_pct("sell", 1.0)
+
+if side_col.button("청산", use_container_width=True):
     g.flat()
     g.idx += 1
     st.rerun()
