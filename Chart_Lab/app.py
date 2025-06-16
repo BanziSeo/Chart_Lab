@@ -32,13 +32,22 @@ def add_indicators_cached(df: pd.DataFrame, mas: tuple) -> pd.DataFrame:
 
 # ────────────────── game helpers ──────────────────
 
-def make_game(ticker: str, capital: int) -> GameState:
+def make_game(ticker: str, capital: int) -> GameState | None:
+    """Return a GameState or **None** if the ticker has insufficient data ( <120 bars )
+    or no viable random start window (5y‑1y).
+    """
     df = load_price(ticker)
+    if len(df) < 120:
+        return None
+
     today = pd.Timestamp.today().normalize()
     lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
     pool = [i for i, d in enumerate(df.index) if lo <= d <= hi and i >= 120]
+    if not pool:
+        return None
+
     start_idx = random.choice(pool)
-    return GameState(df, idx=start_idx, start_cash=capital, tkr=ticker.upper())
+    return GameState(df, idx=start_idx, start_cash=capital, tkr=ticker.upper())(df, idx=start_idx, start_cash=capital, tkr=ticker.upper())
 
 
 def start_game(tkr: str, capital: int):
