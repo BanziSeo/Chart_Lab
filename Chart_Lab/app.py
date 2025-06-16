@@ -1,5 +1,5 @@
-# app.py (Ver. 2.5)
-# 기능: '표시봉' number_input 위젯의 인자 오류 수정
+# app.py (Ver. 2.6)
+# 기능: 1. 매매 시 발생하는 KeyError 버그 수정. 2. 가격-볼륨 차트 구분선 추가.
 
 import streamlit as st
 import pandas as pd
@@ -288,9 +288,6 @@ with chart_col:
 
     if df_trade.empty: st.error("표시할 데이터가 없습니다."); st.stop()
 
-    # ==================================================================
-    # ✨ 버그 수정: number_input의 인자를 명시적으로 지정하여 오류 해결
-    # ==================================================================
     st.number_input(
         "표시봉",
         min_value=50,
@@ -327,7 +324,10 @@ with chart_col:
     log_df = pd.DataFrame(g.log)
     if not log_df.empty:
         log_df = log_df[log_df.action.str.contains("ENTER")]
-        merged = log_df.merge(df_trade.reset_index(), on='date', how='inner')
+        # ==================================================================
+        # ✨ 버그 수정: merge의 기준 열 이름을 'date'에서 'Date'로 변경
+        # ==================================================================
+        merged = log_df.merge(df_trade.reset_index(), on='Date', how='inner')
         if not merged.empty:
             buy_df = merged[merged.action.str.contains("LONG")]
             sell_df = merged[merged.action.str.contains("SHORT")]
@@ -338,8 +338,24 @@ with chart_col:
 
     if st.session_state.stop_loss_price > 0:
         fig.add_hline(y=st.session_state.stop_loss_price, line_dash="dash", line_color="red", line_width=2, annotation_text="손절 라인", annotation_position="bottom right", annotation_font_size=12, annotation_font_color="red", row=1, col=1)
+    
+    # ==================================================================
+    # ✨ 새로운 기능: 가격 차트와 볼륨 차트 사이에 구분선 추가
+    # ==================================================================
+    fig.update_layout(
+        height=st.session_state.chart_height,
+        xaxis_rangeslider_visible=False,
+        hovermode="x unified",
+        margin=dict(t=25, b=20, l=5, r=40),
+        spikedistance=-1,
+        shapes=[dict(
+            type='line',
+            xref='paper', yref='paper',
+            x0=0, y0=0.3, x1=1, y1=0.3, # 볼륨 차트 상단에 라인 추가
+            line=dict(color='black', width=1)
+        )]
+    )
 
-    fig.update_layout(height=st.session_state.chart_height, xaxis_rangeslider_visible=False, hovermode="x unified", margin=dict(t=25, b=20, l=5, r=40), spikedistance=-1)
     fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor", range=[start_i - 1, end_i + PAD])
     fig.update_yaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
     fig.update_yaxes(range=price_yrange, row=1, col=1)
