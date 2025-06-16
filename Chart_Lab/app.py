@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 손절선 표시 오류 해결, MA 기본 색상 지정, 차트/볼륨 비율 조정
+# 기능: 볼륨 차트 스케일 자동 조절 기능 추가
 
 import streamlit as st
 import pandas as pd
@@ -18,7 +18,7 @@ st.set_page_config(page_title="차트 훈련소", page_icon="📈", layout="wide
 
 # ----------------------------------- 상수 정의 -----------------------------------
 PAD, MARGIN = 20, 0.05  # x축 오른쪽 공백, y축 여유 비율
-# [추가] 이동평균선 기본 색상 지정
+# 이동평균선 기본 색상 지정
 MA_COLORS = {
     ("EMA", 10): "red",
     ("EMA", 21): "blue",
@@ -133,7 +133,7 @@ if "game" not in st.session_state:
 g: GameState = st.session_state.game
 chart_col, side_col = st.columns([7, 3])
 
-# [수정] 사이드바 로직을 먼저 실행하여 모든 사용자 입력을 변수에 저장
+# 사이드바 로직을 먼저 실행하여 모든 사용자 입력을 변수에 저장
 with side_col:
     # --- 상태 정보 ---
     price_now = g.df.Close.iloc[g.idx]
@@ -233,7 +233,7 @@ with side_col:
     st.subheader("차트 설정")
     chart_height = st.slider("차트 높이", min_value=400, max_value=1200, value=800, step=50)
 
-# [수정] 차트 그리기를 모든 입력값을 받은 후 마지막에 실행
+# 차트 그리기를 모든 입력값을 받은 후 마지막에 실행
 with chart_col:
     ma_cols = st.columns(2)
     ema_in = ma_cols[0].text_input("EMA 기간(쉼표)", "10,21")
@@ -272,15 +272,18 @@ with chart_col:
         ymax = max(ymax, stop_loss_price)
 
     span = ymax - ymin if ymax > ymin else 1
-    yrng = [ymin - span * MARGIN, ymax + span * MARGIN]
+    price_yrange = [ymin - span * MARGIN, ymax + span * MARGIN]
+    
+    # [추가] 볼륨 차트 y축 범위 자동 계산
+    volume_max = sub['Volume'].max()
+    volume_yrange = [0, volume_max * 1.2]
 
-    # [수정] 차트/볼륨 비율 조정
+    # 차트/볼륨 비율 조정
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                         row_heights=[0.7, 0.3], vertical_spacing=0.02)
     
     # 이동평균선 그리기
     for i, (k, p) in enumerate(mas_tuple):
-        # [수정] 기본 색상 적용
         color = MA_COLORS.get((k, p))
         fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"],
                         line=dict(width=1.5, color=color), name=f"{k}{p}", row=1, col=1)
@@ -324,7 +327,8 @@ with chart_col:
     fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
     fig.update_yaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
 
-    fig.update_yaxes(range=yrng, row=1, col=1)
+    fig.update_yaxes(range=price_yrange, row=1, col=1)
+    fig.update_yaxes(range=volume_yrange, row=2, col=1) # [추가] 볼륨 y축 범위 적용
     fig.update_xaxes(range=[start_i - 1, end_i + PAD])
     
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
