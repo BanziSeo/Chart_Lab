@@ -24,7 +24,7 @@ import streamlit as st
 
 from services.data_loader import get_price
 from services.indicators import add_mas
-from services.simulator import GameState
+from services.simulator import GameState, trade_summary
 
 # --- minimal helpers for incomplete simulator implementation
 class Position:
@@ -162,6 +162,19 @@ def jump_random_date():
         st.rerun()
 
 
+
+def end_game() -> None:
+    """Finish the current game and store a summary in session_state."""
+    g: GameState = st.session_state.game
+
+    # Make sure any open position is closed
+    if g.pos:
+        g.flat()
+
+    st.session_state.last_summary = trade_summary(g)
+    del st.session_state["game"]
+    st.rerun()
+=======
 def _end_session():
     g: GameState = st.session_state.game
     summary = {
@@ -180,6 +193,7 @@ def advance_or_end():
     else:
         _end_session()
         st.rerun()
+
 
 # ─────────────────────────────── Landing page ─────────────────────────────────
 
@@ -384,7 +398,12 @@ if jump_col.button("랜덤 점프", type="secondary", use_container_width=True):
 if model_col.button("모델북 랜덤 교체", type="secondary", use_container_width=True):
     start_random_modelbook(int(g.equity))
 
+
+if side_col.button("게임 종료", type="secondary", use_container_width=True):
+    end_game()
+
 new_tkr = side_col.text_input("새 티커 입력", "")
 if side_col.button("티커 변경", type="secondary", use_container_width=True) and new_tkr.strip():
     start_game(new_tkr.upper(), int(g.equity))
+
 

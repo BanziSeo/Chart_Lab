@@ -104,3 +104,21 @@ class GameState:
         """Return cash plus unrealised PnL."""
         unreal = self.pos.unreal(self._price()) if self.pos else 0.0
         return self.cash + unreal
+
+
+def trade_summary(game: GameState) -> Dict[str, float | str]:
+    """Return basic statistics for the finished game."""
+
+    # Gather PnL from every exit in the log
+    trade_pnls = [e["pnl"] for e in game.log if e.get("action") == "EXIT" and "pnl" in e]
+
+    total_pnl = float(sum(trade_pnls))
+    win_rate = float(sum(1 for p in trade_pnls if p > 0) / len(trade_pnls) * 100) if trade_pnls else 0.0
+    max_trade_pnl = float(max(trade_pnls)) if trade_pnls else 0.0
+
+    return {
+        "ticker": game.ticker,
+        "total_pnl": total_pnl,
+        "max_trade_pnl": max_trade_pnl,
+        "win_rate": win_rate,
+    }
