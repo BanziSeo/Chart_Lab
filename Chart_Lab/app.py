@@ -31,7 +31,7 @@ def create_game(tkr: str, capital: int) -> GameState:
     lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
     idx_pool = [i for i, d in enumerate(df.index) if lo <= d <= hi and i >= 120]
     start_idx = random.choice(idx_pool)
-    return GameState(df, idx=start_idx, start_cash=capital)
+    return GameState(df, idx=start_idx, start_cash=capital, tkr=tkr.upper())
 
 
 def start_game(tkr: str, capital: int):
