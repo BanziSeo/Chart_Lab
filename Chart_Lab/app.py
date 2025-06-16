@@ -320,7 +320,11 @@ fig.update_layout(
     xaxis_rangeslider_visible=False,
     margin=dict(t=40, b=20, l=10, r=10),
 )
-fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
+fig.update_xaxes(
+    type="date",
+    tickformat="%Y-%m-%d",
+    rangebreaks=[dict(bounds=["sat", "mon"])]
+)
 
 chart_col.plotly_chart(fig, use_container_width=True)
 
