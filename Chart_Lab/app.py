@@ -281,6 +281,10 @@ for col in [c for c in vis_df.columns if c.startswith(("EMA", "SMA"))]:
         col=1,
     )
 
+
+if g.pos is not None and g.avg_price is not None:
+    fig.add_hline(y=g.avg_price, line=dict(color="orange", dash="dash"), row=1, col=1)
+
 # --- trade markers
 buy_events = [e for e in g.log if e.get("action") == "ENTER LONG"]
 sell_events = [e for e in g.log if e.get("action") == "ENTER SHORT"]
