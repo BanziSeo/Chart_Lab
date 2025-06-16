@@ -214,6 +214,9 @@ mas = [("EMA", int(p)) for p in ema_txt.split(',') if p.strip().isdigit()] + \
       [("SMA", int(p)) for p in sma_txt.split(',') if p.strip().isdigit()]
 mas_tuple = tuple((k, p, True) for k, p in mas)  # 3rd bool=plot flag
 
+# default colors for common moving averages
+ma_colors = {"EMA10": "red", "EMA21": "blue", "SMA50": "orange", "SMA200": "black"}
+
 # --- data & indicators
 df_price = load_price(g.ticker)
 if df_price is None:
@@ -264,7 +267,12 @@ fig.add_trace(
 
 for col in [c for c in vis_df.columns if c.startswith(("EMA", "SMA"))]:
     fig.add_trace(
-        go.Scatter(x=vis_df.index, y=vis_df[col], name=col, line=dict(width=1)),
+        go.Scatter(
+            x=vis_df.index,
+            y=vis_df[col],
+            name=col,
+            line=dict(width=1, color=ma_colors.get(col, "gray")),
+        ),
         row=1,
         col=1,
     )
