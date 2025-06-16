@@ -46,3 +46,16 @@ def test_next_candle_and_today():
     first_day = g.today
     g.next_candle()
     assert g.today > first_day
+
+
+def test_avg_price_accumulates():
+    df = make_df()
+    g = GameState(df, idx=0, start_cash=1000)
+    g.buy(1)
+    g.next_candle()
+    g.buy(1)
+    assert g.pos.qty == 2
+    assert g.avg_price == 102.5
+    g.next_candle()
+    g.flat()
+    assert g.cash == 1015
