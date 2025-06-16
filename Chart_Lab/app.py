@@ -1,8 +1,9 @@
-# ───────────────────────────── Chart_Lab/app.py ─────────────────────────────
-"""Interactive Trading Simulator – Streamlit app
-   깜빡임 최소화 + 시작 자본 입력 + 거래 로그 복원 버전
-"""
-import os, random, streamlit as st, pandas as pd
+# Chart_Lab/app.py
+# ────────────────── Interactive Trading Simulator ──────────────────
+import os
+import random
+import streamlit as st
+import pandas as pd
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
@@ -10,21 +11,21 @@ from services.data_loader import get_price
 from services.indicators import add_mas
 from services.simulator import GameState
 
-# ────────────────────────── Page config ──────────────────────────
 st.set_page_config(page_title="차트 훈련소", page_icon="📈", layout="wide")
 
-# ────────────────────── 캐싱: 가격·지표 계산 ──────────────────────
+# ────────────────── cache helpers ──────────────────
 @st.cache_data
-def cache_price(tkr: str):
+def cache_price(tkr: str) -> pd.DataFrame:
     return get_price(tkr)
 
+
 @st.cache_data
-def cache_indicators(df: pd.DataFrame, mas_tuple: tuple):
-    mas = [(k, p, True) for k, p in mas_tuple]  # indicator util expects 3‑tuple
+def cache_indicators(df: pd.DataFrame, mas_tuple: tuple) -> pd.DataFrame:
+    mas = [(k, p, True) for k, p in mas_tuple]
     return add_mas(df.copy(), mas)
 
-# ───────────────────────── 게임 생성 함수 ─────────────────────────
 
+# ────────────────── game helpers ──────────────────
 def create_game(tkr: str, capital: int) -> GameState:
     df = cache_price(tkr)
     today = pd.Timestamp.today().normalize()
@@ -68,13 +69,16 @@ def jump_random_date():
     st.session_state.view_n = 120
     st.rerun()
 
-# ───────────────────────── 첫 랜딩 화면 ─────────────────────────
+
+# ────────────────── landing page ──────────────────
 if "game" not in st.session_state:
     st.header("📈 차트 훈련소")
 
     col_code, col_cash = st.columns([2, 1])
     code_in = col_code.text_input("시작할 티커 입력", "")
-    cash_in = col_cash.number_input("시작 자본($)", 1_000, 1_000_000, 100_000, step=1_000)
+    cash_in = col_cash.number_input(
+        "시작 자본($)", min_value=1_000, max_value=1_000_000, value=100_000, step=1_000
+    )
 
     c1, c2 = st.columns([1, 1])
     if c1.button("새 게임 시작") and code_in.strip():
@@ -87,46 +91,75 @@ if "game" not in st.session_state:
         st.json(st.session_state.last_summary)
     st.stop()
 
-# ───────────────────────── 메인 게임 화면 ─────────────────────────
+# ────────────────── main game screen ──────────────────
 g: GameState = st.session_state.game
 chart_col, side_col = st.columns([7, 3])
 
-# ── 이동평균 입력
+# --- MA 입력
 ema_txt = chart_col.text_input("EMA 기간(쉼표)", "10,21")
 sma_txt = chart_col.text_input("SMA 기간(쉼표)", "50,200")
-mas_input = [("EMA", int(p)) for p in ema_txt.split(",") if p.strip().isdigit()] + \
-            [("SMA", int(p)) for p in sma_txt.split(",") if p.strip().isdigit()]
+mas_input = [( "EMA", int(p)) for p in ema_txt.split(",") if p.strip().isdigit()] + \
+            [( "SMA", int(p)) for p in sma_txt.split(",") if p.strip().isdigit()]
 mas_tuple = tuple(mas_input)
 
-# ── 데이터 준비
+# --- 데이터 준비
 full_df = cache_price(g.ticker)
-vis_df = cache_indicators(full_df, mas_tuple).iloc[: g.idx + 1]
+vis_df  = cache_indicators(full_df, mas_tuple).iloc[: g.idx + 1]
 price_now = vis_df.Close.iloc[-1]
 
-# ── 뷰 윈도우 길이 조절
+# --- view window
 if "view_n" not in st.session_state:
     st.session_state.view_n = 120
-view_n = st.session_state.view_n
-view_n = chart_col.number_input("표시봉", 50, len(vis_df), view_n, step=10, key="view_n")
-
+view_n = chart_col.number_input("표시봉", 50, len(vis_df), st.session_state.view_n,
+                                step=10, key="view_n")
 start_i = max(0, len(vis_df) - view_n)
 sub_df = vis_df.iloc[start_i:]
 
-# ── 차트 생성 (placeholder 재사용)
-fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.75, 0.25], vertical_spacing=0.02)
-# …(캔들, MA, 볼륨, 화살표 그리는 기존 코드 그대로)…
-# 권장: 기존 차트 생성 로직 붙여 넣기 (지면 관계상 생략)
+# --- plotly chart
+fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                    row_heights=[0.75, 0.25], vertical_spacing=0.02)
 
+# MAs
+palette = ["red", "blue", "orange", "black", "green", "purple"]
+for i, (k, p) in enumerate(mas_tuple):
+    fig.add_scatter(x=vis_df.index, y=vis_df[f"{k}{p}"],
+                    line=dict(width=1, color=palette[i % len(palette)]),
+                    name=f"{k}{p}", row=1, col=1)
+
+# candles
+inc = dict(line=dict(color="black", width=1), fillcolor="rgba(0,0,0,0)")
+dec = dict(line=dict(color="black", width=1), fillcolor="black")
+fig.add_candlestick(x=vis_df.index, open=vis_df.Open, high=vis_df.High,
+                    low=vis_df.Low, close=vis_df.Close,
+                    increasing=inc, decreasing=dec, name="Price",
+                    row=1, col=1)
+
+# volume
+vol_color = ["black" if c <= o else "white"
+             for o, c in zip(vis_df.Open, vis_df.Close)]
+fig.add_bar(x=vis_df.index, y=vis_df.Volume, marker_color=vol_color,
+            marker_line_color="black", marker_line_width=0.5,
+            name="Volume", row=2, col=1)
+fig.add_scatter(x=vis_df.index, y=vis_df.Volume.rolling(50).mean(),
+                line=dict(width=1, color="blue", dash="dot"), name="Vol SMA50",
+                row=2, col=1)
+
+fig.update_layout(xaxis_rangeslider_visible=False, hovermode="x unified",
+                  margin=dict(t=25, b=20, l=5, r=5))
+fig.update_yaxes(showgrid=False, fixedrange=True, row=2, col=1)
+
+# placeholder reuse
 if "chart_slot" not in st.session_state:
     st.session_state.chart_slot = chart_col.empty()
+st.session_state.chart_slot.plotly_chart(
+    fig, use_container_width=True, config={"displayModeBar": False}
+)
 
-st.session_state.chart_slot.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-# ── 측면 상태 패널
+# ── status panel
 realized_pl = g.cash - g.initial_cash
-unreal_pl = g.pos.unreal(price_now) if g.pos else 0
-pos_val = g.pos.market_value(price_now) if g.pos else 0
-equity = g.cash + pos_val
+unreal_pl   = g.pos.unreal(price_now) if g.pos else 0
+pos_val     = g.pos.market_value(price_now) if g.pos else 0
+equity      = g.cash + pos_val
 
 with side_col:
     st.subheader("상태")
@@ -136,15 +169,12 @@ with side_col:
     st.write(f"**미실현 P/L**: {unreal_pl:+,.2f}")
     if g.pos:
         pct = pos_val / equity * 100 if equity else 0
-        st.write(f"**포지션**: {g.pos.side.upper()} {g.pos.qty}주 @ {g.pos.avg_price:.2f} (**{pct:.1f}%**) ")
-
+        st.write(f"**포지션**: {g.pos.side.upper()} {g.pos.qty}주 "
+                 f"@ {g.pos.avg_price:.2f} (**{pct:.1f}%**)")
     st.write("### 거래 로그")
     if g.log:
         st.dataframe(pd.DataFrame(g.log))
     else:
         st.write("_empty_")
 
-# ── 매매 & 컨트롤 버튼 (기존 로직 그대로) …
-# (buy/sell/flat/next_candle/jump_random/modelbook_random 구현 생략)
-
-# ───────────────────────────── END app.py ─────────────────────────────
+# ── (매수/매도/컨트롤 버튼 로직은 기존 구현 그대로 넣으면 됩니다)
