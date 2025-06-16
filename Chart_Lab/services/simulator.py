@@ -8,7 +8,7 @@ class GameState:
         self.cash = start_cash
         self.pos = None  # Position object or None
         self.log = []
-	self.ticker       = tkr          # ★ 추가
+        self.ticker       = tkr          # ★ 추가
 
     # ... today, next_candle methods unchanged ...
 
