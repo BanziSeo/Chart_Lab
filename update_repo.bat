@@ -22,6 +22,11 @@ echo.
 echo Adding all changes...
 git add -A
 
+
+echo Pulling latest changes...
+git pull --rebase origin main
+
+
 echo Committing...
 git commit -m "%MSG%"
 if errorlevel 1 (
