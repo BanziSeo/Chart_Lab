@@ -208,7 +208,7 @@ view_n = chart_col.number_input("표시봉", 50, len(ind_df), st.session_state.v
 st.session_state.view_n = int(view_n)
 vis_df = ind_df.iloc[-st.session_state.view_n:]
 
-# --- plotting (unchanged) ...
+# --- plotting with trade markers --------------------------------------------
 # 기존 코드에 맞춰 Plotly 차트와 트레이딩 버튼을 구성한다.
 
 fig = make_subplots(
@@ -242,6 +242,38 @@ for col in [c for c in vis_df.columns if c.startswith(("EMA", "SMA"))]:
         row=1,
         col=1,
     )
+
+# --- trade markers
+buy_events = [e for e in g.log if e.get("action") == "ENTER LONG"]
+sell_events = [e for e in g.log if e.get("action") == "ENTER SHORT"]
+
+fig.add_trace(
+    go.Scatter(
+        x=[e["date"] for e in buy_events],
+        y=[e["price"] for e in buy_events],
+        mode="markers",
+        marker_symbol="triangle-up",
+        marker_color="green",
+        marker_size=10,
+        name="Buy",
+    ),
+    row=1,
+    col=1,
+)
+
+fig.add_trace(
+    go.Scatter(
+        x=[e["date"] for e in sell_events],
+        y=[e["price"] for e in sell_events],
+        mode="markers",
+        marker_symbol="triangle-down",
+        marker_color="red",
+        marker_size=10,
+        name="Sell",
+    ),
+    row=1,
+    col=1,
+)
 
 fig.add_trace(
     go.Bar(x=vis_df.index, y=vis_df.Volume, name="Volume"),
