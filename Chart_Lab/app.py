@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 렌더링 구조를 변경하여 손절선 표시 오류 최종 해결
+# 기능: 손절선 시각화 대신 '리스크 베팅 금액' 실시간 계산 기능 추가
 
 import streamlit as st
 import pandas as pd
@@ -132,19 +132,11 @@ if "game" not in st.session_state:
     st.stop()
 
 # ---------------------------------- 메인 게임 화면 ----------------------------------
-# 1단계: 모든 사용자 입력 및 상태를 먼저 정의
 g: GameState = st.session_state.game
 chart_col, side_col = st.columns([7, 3])
 
-# 세션 상태 초기화
-for key, default_value in {
-    'stop_loss_price': 0.0,
-    'chart_height': 800,
-    'ema_input': "10,21",
-    'sma_input': "50,200"
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = default_value
+if 'stop_loss_price' not in st.session_state:
+    st.session_state.stop_loss_price = 0.0
 
 with side_col:
     price_now = g.df.Close.iloc[g.idx]
@@ -195,11 +187,24 @@ with side_col:
 
     st.number_input("손절매 가격", key="stop_loss_price", format="%.2f", step=0.01)
     
-    if g.pos and st.session_state.stop_loss_price > 0:
-        if g.pos.side == 'long': potential_loss = (g.pos.avg_price - st.session_state.stop_loss_price) * g.pos.qty
-        else: potential_loss = (st.session_state.stop_loss_price - g.pos.avg_price) * g.pos.qty
-        loss_pct = (potential_loss / equity) * 100 if equity > 0 else 0
-        st.caption(f"예상 손실: ${potential_loss:,.2f} (자산의 {loss_pct:.1f}%)")
+    # [수정] '리스크 베팅 금액' 계산 로직
+    if st.session_state.stop_loss_price > 0:
+        # 롱 포지션 진입을 가정하고 리스크 계산
+        risk_per_share_long = price_now - st.session_state.stop_loss_price
+        total_risk_long = risk_per_share_long * amount
+        risk_pct_long = (total_risk_long / equity) * 100 if equity > 0 else 0
+        
+        # 숏 포지션 진입을 가정하고 리스크 계산
+        risk_per_share_short = st.session_state.stop_loss_price - price_now
+        total_risk_short = risk_per_share_short * amount
+        risk_pct_short = (total_risk_short / equity) * 100 if equity > 0 else 0
+        
+        # 매수/매도 버튼에 맞춰서 적절한 리스크 표시
+        if risk_per_share_long > 0:
+            st.caption(f"↳ 매수 시 리스크: ${total_risk_long:,.2f} ({risk_pct_long:.2f}%)")
+        if risk_per_share_short > 0:
+             st.caption(f"↳ 매도 시 리스크: ${total_risk_short:,.2f} ({risk_pct_short:.2f}%)")
+
 
     b_col, s_col = st.columns(2)
     if b_col.button("매수", use_container_width=True):
@@ -215,15 +220,14 @@ with side_col:
     
     st.markdown("---")
     st.subheader("차트 설정")
-    st.slider("차트 높이", min_value=400, max_value=1200, value=st.session_state.chart_height, step=50, key="chart_height")
+    chart_height = st.slider("차트 높이", min_value=400, max_value=1200, value=800, step=50)
 
-# 2단계: 데이터 준비
 with chart_col:
     ma_cols = st.columns(2)
-    ma_cols[0].text_input("EMA 기간(쉼표)", key="ema_input")
-    ma_cols[1].text_input("SMA 기간(쉼표)", key="sma_input")
-    mas_input = [("EMA", int(p)) for p in st.session_state.ema_input.split(",")] + \
-                [("SMA", int(p)) for p in st.session_state.sma_input.split(",")]
+    ema_input = ma_cols[0].text_input("EMA 기간(쉼표)", "10,21")
+    sma_input = ma_cols[1].text_input("SMA 기간(쉼표)", "50,200")
+    mas_input = [("EMA", int(p)) for p in ema_input.split(",")] + \
+                [("SMA", int(p)) for p in sma_input.split(",")]
     mas_tuple = tuple(mas_input)
 
     df_full = g.df
@@ -243,18 +247,14 @@ with chart_col:
     ma_cols_for_range = [f"{k}{p}" for k, p in mas_tuple]
     ymin = sub[["Low"] + ma_cols_for_range].min().min()
     ymax = sub[["High"] + ma_cols_for_range].max().max()
-    if g.pos and st.session_state.stop_loss_price > 0:
-        ymin = min(ymin, st.session_state.stop_loss_price)
-        ymax = max(ymax, st.session_state.stop_loss_price)
 
     span = ymax - ymin if ymax > ymin else 1
     price_yrange = [ymin - span * MARGIN, ymax + span * MARGIN]
     volume_yrange = [0, sub['Volume'].max() * 1.2]
 
-    # 3단계: 차트 그리기
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.02)
     
-    for k, p in mas_tuple:
+    for i, (k, p) in enumerate(mas_tuple):
         color = MA_COLORS.get((k, p))
         fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"], line=dict(width=1.5, color=color), name=f"{k}{p}", row=1, col=1)
     
@@ -273,16 +273,11 @@ with chart_col:
             if not sell_df.empty:
                 fig.add_scatter(x=sell_df['i'], y=sell_df['High'] + span * 0.03, mode="markers", marker=dict(symbol="triangle-down", color="red", size=10), name="Sell", row=1, col=1)
 
-    if g.pos and st.session_state.stop_loss_price > 0:
-        fig.add_hline(y=st.session_state.stop_loss_price, line=dict(color="red", dash="dash", width=2),
-                      annotation_text=f"Stop {st.session_state.stop_loss_price:.2f}", annotation_position="bottom right", row=1, col=1)
-
     tick_step = max(len(sub) // 10, 1)
-    fig.update_layout(height=st.session_state.chart_height, xaxis_rangeslider_visible=False, hovermode="x unified", margin=dict(t=25, b=20, l=5, r=40), spikedistance=-1)
+    fig.update_layout(height=chart_height, xaxis_rangeslider_visible=False, hovermode="x unified", margin=dict(t=25, b=20, l=5, r=40), spikedistance=-1)
     fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor", range=[start_i - 1, end_i + PAD])
     fig.update_yaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
     fig.update_yaxes(range=price_yrange, row=1, col=1)
     fig.update_yaxes(range=volume_yrange, row=2, col=1)
     
-    # 4단계: 최종 렌더링
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
