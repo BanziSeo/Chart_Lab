@@ -1,5 +1,5 @@
-# app.py (Ver. 2.1)
-# 기능: 사용자가 입력한 손절매 가격을 차트에 수평 점선으로 표시
+# app.py (Ver. 2.2)
+# 기능: 볼륨 바 색상을 캔들(양봉/음봉)에 맞춰 동적으로 변경
 
 import streamlit as st
 import pandas as pd
@@ -291,10 +291,26 @@ with chart_col:
         color = MA_COLORS.get((k, p))
         fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"], line=dict(width=1.5, color=color), name=f"{k}{p}", row=1, col=1)
     
-    # 캔들스틱 및 볼륨 차트 그리기
+    # 캔들스틱 차트 그리기
     fig.add_candlestick(x=df_trade.i, open=df_trade.Open, high=df_trade.High, low=df_trade.Low, close=df_trade.Close, name="Price", row=1, col=1, increasing=dict(line=dict(color="black", width=1), fillcolor="white"), decreasing=dict(line=dict(color="black", width=1), fillcolor="black"))
-    fig.add_bar(x=df_trade.i, y=df_trade.Volume, name="Volume", row=2, col=1, marker_color='rgba(128,128,128,0.5)')
-    
+
+    # ==================================================================
+    # ✨ 새로운 기능: 볼륨 차트 색상을 할로우 캔들 스타일로 변경
+    # ==================================================================
+    # 종가(Close)가 시가(Open)보다 높거나 같으면 양봉(white), 아니면 음봉(black)
+    volume_colors = ['white' if c >= o else 'black' for o, c in zip(df_trade['Open'], df_trade['Close'])]
+    fig.add_bar(
+        x=df_trade.i, 
+        y=df_trade.Volume, 
+        name="Volume", 
+        row=2, 
+        col=1,
+        marker=dict(
+            color=volume_colors,             # 각 바의 채우기 색상 리스트
+            line=dict(color='black', width=1) # 모든 바의 테두리 설정
+        )
+    )
+
     # 매매 기록(화살표) 표시
     log_df = pd.DataFrame(g.log)
     if not log_df.empty:
@@ -308,9 +324,7 @@ with chart_col:
             if not sell_df.empty:
                 fig.add_scatter(x=sell_df['i'], y=sell_df['High'] + span * 0.03, mode="markers", marker=dict(symbol="triangle-down", color="red", size=10), name="Sell", row=1, col=1)
 
-    # ==================================================================
-    # ✨ 새로운 기능: 손절매 가격을 차트에 수평선으로 표시
-    # ==================================================================
+    # 손절매 가격을 차트에 수평선으로 표시
     stop_loss_price = st.session_state.get("stop_loss_price", 0.0)
     if stop_loss_price > 0:
         fig.add_hline(
@@ -334,4 +348,3 @@ with chart_col:
     
     # 차트 출력
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
