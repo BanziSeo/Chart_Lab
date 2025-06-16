@@ -1,46 +1,41 @@
 @echo off
-REM --------------- Git auto-update ---------------
+REM ────────── Git auto-update script ──────────
+setlocal enabledelayedexpansion
 
-REM 1) move to script folder
-cd /d "%~dp0"
+echo --------------- Git status ---------------
+git status -s
 
-REM 2) optional – change console to UTF-8; safe even without it
-chcp 65001 > nul
-
-echo.
-git status
-echo.
-
-set /p MSG="Commit message (leave blank to cancel): "
+:: ── 커밋 메시지 입력
+set /p MSG=Commit message (leave blank to cancel): 
 if "%MSG%"=="" (
-    echo Cancelled.
-    pause
-    goto :eof
+    echo [CANCEL] Empty message
+    goto:eof
 )
 
-echo.
-echo Adding all changes...
+:: ── 변경 파일 스테이지 & 커밋
+echo Adding changes...
 git add -A
-
-
-echo Pulling latest changes...
-git pull --rebase origin main
-
 
 echo Committing...
 git commit -m "%MSG%"
+
+:: ── 원격 최신 변경 반영 후 푸시
+echo Rebasing latest remote...
+git pull --rebase origin main
 if errorlevel 1 (
-    echo Nothing to commit.
+    echo [ERROR] Pull failed – resolve conflicts, then run again.
     pause
-    goto :eof
+    goto:eof
 )
 
-echo.
-echo Pushing to origin/main...
+echo Pushing...
 git push origin main
 if errorlevel 1 (
     echo [ERROR] Push failed – check network / credentials.
-) else (
-    echo Push succeeded!  Streamlit Cloud will redeploy automatically.
+    pause
+    goto:eof
 )
+
+echo.
+echo [OK] Repo updated successfully.
 pause
