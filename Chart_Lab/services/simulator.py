@@ -1,4 +1,4 @@
-# services/simulator.py (v2 - Position 클래스 포함 최종본)
+# services/simulator.py (최종 점검 완료)
 
 class Position:
     """
@@ -10,7 +10,7 @@ class Position:
     def __init__(self, side: str, entry_qty: int, entry_price: float, current_pos=None):
         self.side = side
         
-        # 기존에 같은 방향의 포지션이 있다면, 물타기/불타기(평단가 조절)를 합니다.
+        # 같은 방향으로 추가 진입 시, 평단가와 수량을 업데이트 (물타기/불타기)
         if current_pos and current_pos.side == self.side:
             current_value = current_pos.avg_price * current_pos.qty
             entry_value = entry_price * entry_qty
@@ -18,15 +18,12 @@ class Position:
             
             self.avg_price = (current_value + entry_value) / total_qty
             self.qty = total_qty
-        else:
-            # 신규 진입 또는 반대 포지션 진입의 경우 (기존 포지션 덮어쓰기)
+        else: # 신규 진입
             self.avg_price = entry_price
             self.qty = entry_qty
 
     def close(self, exit_price: float) -> float:
-        """
-        포지션을 청산하고 실현 손익(PnL)을 계산하여 반환합니다.
-        """
+        """포지션을 청산하고 실현 손익(PnL)을 계산하여 반환합니다."""
         if self.side == "long":
             pnl = (exit_price - self.avg_price) * self.qty
         else:  # short
@@ -35,16 +32,14 @@ class Position:
         return pnl
 
 class GameState:
-    """
-    전체 게임의 상태를 관리하는 클래스.
-    """
+    """전체 게임의 상태를 관리하는 클래스."""
     def __init__(self, df, idx: int, start_cash: int, tkr: str):
         self.df = df
         self.ticker = tkr
         self.idx = idx
         self.initial_cash = start_cash
         self.cash = start_cash
-        self.pos: Position | None = None  # 포지션 상태 (Position 객체 또는 None)
+        self.pos: Position | None = None
         self.log = []
 
     @property
@@ -60,42 +55,29 @@ class GameState:
     def buy(self, qty: int):
         """매수 주문을 처리합니다."""
         price_now = self.df.Close.iloc[self.idx]
+        self.cash -= (price_now * qty) # 매수 시 현금 차감
         self.pos = Position("long", qty, price_now, self.pos)
         self.log.append({"date": self.today, "action": "ENTER LONG", "price": price_now, "qty": qty})
 
     def sell(self, qty: int):
-        """
-        매도 주문을 처리합니다.
-        (주: 현재 로직에서는 공매도(short) 진입으로 동작합니다. 
-        단순 청산을 원하면 flat()을 사용해야 합니다.)
-        """
+        """매도(공매도) 주문을 처리합니다."""
         price_now = self.df.Close.iloc[self.idx]
-        # 보유 수량보다 많이 팔면, 그만큼 공매도로 전환됩니다.
-        # 이 부분의 로직은 원하는 전략에 따라 수정할 수 있습니다.
-        if self.pos and self.pos.side == "long":
-            # 보유 중인 long 포지션 청산
-            self.flat() # 단순화: 일단 전량 청산 후 신규 short 진입
-            self.pos = Position("short", qty, price_now)
-        else:
-            # 신규 short 진입 또는 short 포지션에 추가
-            self.pos = Position("short", qty, price_now, self.pos)
-        
+        self.pos = Position("short", qty, price_now, self.pos)
+        # 공매도 시 증거금 관련 로직은 여기서는 단순화합니다.
         self.log.append({"date": self.today, "action": "ENTER SHORT", "price": price_now, "qty": qty})
 
     def flat(self):
-    """보유 포지션을 전량 청산하고 수수료를 차감합니다."""
-    if not self.pos:
-        return
+        """보유 포지션을 전량 청산하고 수수료를 차감합니다."""
+        if not self.pos:
+            return
+            
+        price_now = self.df.Close.iloc[self.idx]
+        pnl = self.pos.close(price_now)
+        
+        trade_value = self.pos.qty * price_now
+        fee = trade_value * 0.0014 # 수수료 0.14%
 
-    price_now = self.df.Close.iloc[self.idx]
-    pnl = self.pos.close(price_now)
+        self.cash += (pnl - fee)
+        self.log.append({"date": self.today, "action": "EXIT", "price": price_now, "pnl": pnl, "fee": -fee})
+        self.pos = None
 
-    # 수수료 계산 (매매대금에 대해 부과, 여기서는 pnl을 대금의 근사치로 사용)
-    # 정확한 계산을 원하면 (entry_price * qty) + (exit_price * qty) 를 기준으로 해야 합니다.
-    # 여기서는 단순화를 위해 손익(pnl)의 절대값을 기준으로 계산합니다.
-    trade_value = self.pos.qty * price_now # 실제 매도 대금
-    fee = trade_value * 0.0014  # 0.14%
-
-    self.cash += (pnl - fee)  # 실현 손익에서 수수료를 차감
-    self.log.append({"date": self.today, "action": "EXIT", "price": price_now, "pnl": pnl, "fee": -fee})
-    self.pos = None
