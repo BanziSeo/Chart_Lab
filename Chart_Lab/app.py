@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import random
-from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -94,13 +93,12 @@ def make_game(ticker: str, capital: int) -> GameState | None:
     if df is None or len(df) < 120:
         return None
 
-    today = pd.Timestamp.today().normalize()
-    lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
-    pool = [i for i, d in enumerate(df.index) if lo <= d <= hi and i >= 120]
-    if not pool:
+    start_min = 50
+    start_max = len(df) - 100
+    if start_min >= start_max:
         return None
 
-    start_idx = random.choice(pool)
+    start_idx = random.randint(start_min, start_max)
     return GameState(df, idx=start_idx, start_cash=capital, tkr=ticker.upper())
 
 
