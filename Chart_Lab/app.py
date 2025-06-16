@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 부드러운 마우스 십자선, 손절선 표시 오류 수정
+# 기능: 사이드바 레이아웃 순서 변경
 
 import streamlit as st
 import pandas as pd
@@ -141,7 +141,20 @@ with side_col:
         st.text(f"포지션: {g.pos.side.upper()} {g.pos.qty}주 @ ${g.pos.avg_price:,.2f}")
 
     st.markdown("---")
-    
+
+    # --- [수정] 게임 진행 섹션을 위로 이동 ---
+    st.subheader("게임 진행")
+    n_col, j_col, r_col = st.columns(3)
+    if n_col.button("▶ 다음", use_container_width=True):
+        g.next_candle()
+        st.rerun()
+    if j_col.button("🎲 날짜 변경", use_container_width=True):
+        jump_random_date()
+    if r_col.button("📚 모델북", use_container_width=True):
+        start_random_modelbook(g.initial_cash)
+
+    st.markdown("---")
+
     # --- 매매 컨트롤 ---
     st.subheader("매매")
     amount = st.number_input("수량(주)", min_value=1, value=10, step=1)
@@ -179,25 +192,12 @@ with side_col:
     
     st.markdown("---")
     
-    # --- 차트 설정 ---
+    # --- [수정] 차트 설정 섹션을 아래로 이동 ---
     st.subheader("차트 설정")
     chart_height = st.slider("차트 높이", min_value=400, max_value=1200, value=800, step=50)
 
     st.markdown("---")
 
-    # --- 게임 진행 ---
-    st.subheader("게임 진행")
-    n_col, j_col, r_col = st.columns(3)
-    if n_col.button("▶ 다음", use_container_width=True):
-        g.next_candle()
-        st.rerun()
-    if j_col.button("🎲 날짜 변경", use_container_width=True):
-        jump_random_date()
-    if r_col.button("📚 모델북", use_container_width=True):
-        start_random_modelbook(g.initial_cash)
-
-    st.markdown("---")
-    
     def create_summary(log: list, ticker: str) -> dict:
         trades = [x for x in log if "pnl" in x]
         summary = {"종목": ticker}
@@ -271,6 +271,21 @@ with chart_col:
 
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                         row_heights=[0.8, 0.2], vertical_spacing=0.02)
+    
+    # [수정] 매매 화살표 로직 추가
+    log_df = pd.DataFrame(g.log)
+    if not log_df.empty:
+        log_df = log_df[log_df.action.str.contains("ENTER")]
+        merged = log_df.merge(df_trade.reset_index(), on='date', how='inner')
+        if not merged.empty:
+            buy_df = merged[merged.action.str.contains("LONG")]
+            sell_df = merged[merged.action.str.contains("SHORT")]
+            if not buy_df.empty:
+                fig.add_scatter(x=buy_df['i'], y=buy_df['Low'] - span * 0.03, mode="markers",
+                                marker=dict(symbol="triangle-up", color="green", size=10), name="Buy")
+            if not sell_df.empty:
+                fig.add_scatter(x=sell_df['i'], y=sell_df['High'] + span * 0.03, mode="markers",
+                                marker=dict(symbol="triangle-down", color="red", size=10), name="Sell")
 
     for k, p in mas_tuple:
         fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"], line=dict(width=1.5), name=f"{k}{p}", row=1, col=1)
@@ -290,7 +305,6 @@ with chart_col:
         margin=dict(t=25, b=20, l=5, r=40),
         spikedistance=-1,
     )
-    # [수정] 십자선이 커서를 따라다니도록 spikesnap="cursor" 추가
     fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
     fig.update_yaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
 
