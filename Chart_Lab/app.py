@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 종목명 숨기기, 현재가 표시, 주문 비중(%) 표시 기능 추가
+# 기능: 손절선 시각화, 예상 손실 계산 기능 추가
 
 import streamlit as st
 import pandas as pd
@@ -59,7 +59,6 @@ def start_game(tkr: str, capital: int):
 
 def start_random_modelbook(capital: int):
     """modelbook.txt에서 랜덤 티커로 게임 시작"""
-    # modelbook.txt 경로를 좀 더 안정적으로 찾습니다.
     root = os.path.dirname(__file__)
     path = os.path.join(root, "..", "modelbook.txt")
     if not os.path.exists(path):
@@ -97,11 +96,9 @@ def jump_random_date():
 if "game" not in st.session_state:
     st.header("📈 차트 훈련소")
     
-    # --- 결과 표시 부분 ---
     if st.session_state.get("last_summary"):
         st.markdown("---")
         summary = st.session_state.last_summary
-        # [수정] 결과 분석에 종목명 표시
         st.subheader(f"📊 지난 게임 성과 분석: **{summary.get('종목', '???')}**")
         
         m_col1, m_col2, m_col3 = st.columns(3)
@@ -113,7 +110,6 @@ if "game" not in st.session_state:
             st.json(summary)
         st.markdown("---")
     
-    # --- 새 게임 시작 UI ---
     col_tkr, col_cash = st.columns([2, 1])
     ticker_in = col_tkr.text_input("시작할 티커 입력", "AAPL")
     cash_in = col_cash.number_input("시작 자본($)", 1_000, 1_000_000, 10_000, 1_000)
@@ -130,7 +126,6 @@ if "game" not in st.session_state:
 g: GameState = st.session_state.game
 chart_col, side_col = st.columns([7, 3])
 
-# --- 이동평균 입력 ---
 with chart_col:
     ma_cols = st.columns(2)
     ema_in = ma_cols[0].text_input("EMA 기간(쉼표)", "10,21")
@@ -139,7 +134,6 @@ mas_input = [("EMA", int(p)) for p in ema_in.split(",") if p.strip().isdigit()] 
             [("SMA", int(p)) for p in sma_in.split(",") if p.strip().isdigit()]
 mas_tuple = tuple(mas_input)
 
-# --- 데이터 준비 ---
 df_full = g.df
 visible_df_with_ma = add_cached_indicators(df_full, mas_tuple).iloc[:g.idx + 1]
 
@@ -153,7 +147,6 @@ if df_trade.empty:
 
 price_now = df_trade.Close.iloc[-1]
 
-# --- 표시할 캔들 수 ---
 if "view_n" not in st.session_state: st.session_state.view_n = 120
 view_n_input = chart_col.number_input("표시봉", 50, len(df_trade), st.session_state.view_n, 10, label_visibility="collapsed")
 if int(view_n_input) != st.session_state.view_n:
@@ -163,7 +156,6 @@ view_n = st.session_state.view_n
 start_i = df_trade.i.iloc[max(0, len(df_trade) - view_n)]
 end_i = df_trade.i.iloc[-1]
 
-# --- 차트 Y축 범위 ---
 sub = df_trade[df_trade.i >= start_i]
 ma_cols_for_range = [f"{k}{p}" for k, p in mas_tuple]
 ymin = sub[["Low"] + ma_cols_for_range].min().min()
@@ -171,47 +163,51 @@ ymax = sub[["High"] + ma_cols_for_range].max().max()
 span = ymax - ymin if ymax > ymin else 1
 yrng = [ymin - span * MARGIN, ymax + span * MARGIN]
 
-# --- 차트 객체 생성 ---
 fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                     row_heights=[0.8, 0.2], vertical_spacing=0.02)
-# (차트 그리는 나머지 부분은 동일)
+
 for k, p in mas_tuple:
     fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"], line=dict(width=1.5), name=f"{k}{p}", row=1, col=1)
 fig.add_candlestick(x=df_trade.i, open=df_trade.Open, high=df_trade.High, low=df_trade.Low, close=df_trade.Close, name="Price", row=1, col=1, increasing=dict(line=dict(color="black", width=1), fillcolor="white"), decreasing=dict(line=dict(color="black", width=1), fillcolor="black"))
 fig.add_bar(x=df_trade.i, y=df_trade.Volume, name="Volume", row=2, col=1, marker_color='rgba(128,128,128,0.5)')
-tick_step = max(len(sub) // 10, 1)
-fig.update_layout(xaxis=dict(tickmode="array", tickvals=sub.i[::tick_step], ticktext=sub.index.strftime("%y-%m-%d")[::tick_step], tickangle=0), xaxis_rangeslider_visible=False, hovermode="x unified", margin=dict(t=25, b=20, l=5, r=40))
-fig.update_yaxes(range=yrng, row=1, col=1)
-fig.update_xaxes(range=[start_i - 1, end_i + PAD])
-if "chart_slot" not in st.session_state:
-    st.session_state.chart_slot = chart_col.empty()
-st.session_state.chart_slot.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 # ------------------------------ 사이드바 (상태, 컨트롤) ------------------------------
 with side_col:
-    # --- 상태 정보 ---
     pos_val = g.pos.qty * price_now if g.pos else 0
     equity = g.cash + pos_val
     unreal = (price_now - g.pos.avg_price) * g.pos.qty if g.pos and g.pos.side == 'long' else (g.pos.avg_price - price_now) * g.pos.qty if g.pos and g.pos.side == 'short' else 0
     
-    st.subheader("종목: ???") # [수정] 종목명 숨기기
+    st.subheader("종목: ???")
     st.metric("현재 평가자산", f"${equity:,.2f}", f"${unreal:,.2f} 미실현")
     st.text(f"현금: ${g.cash:,.2f}")
-    st.text(f"현재가(종가): ${price_now:,.2f}") # [추가] 현재가 표시
+    st.text(f"현재가(종가): ${price_now:,.2f}")
     if g.pos:
         st.text(f"포지션: {g.pos.side.upper()} {g.pos.qty}주 @ ${g.pos.avg_price:,.2f}")
 
     st.markdown("---")
     
-    # --- 매매 컨트롤 ---
     st.subheader("매매")
     amount = st.number_input("수량(주)", min_value=1, value=10, step=1)
     
-    # [추가] 주문 금액 및 자산 대비 비중 표시
     order_value = amount * price_now
     position_pct = (order_value / equity) * 100 if equity > 0 else 0
     st.caption(f"주문 금액: ${order_value:,.2f} (자산의 {position_pct:.1f}%)")
+
+    # --- [추가] 손절매 가격 입력 및 예상 손실 계산 ---
+    stop_loss_price = st.number_input("손절매 가격", value=0.0, format="%.2f", step=0.01)
+    if g.pos and stop_loss_price > 0:
+        if g.pos.side == 'long':
+            potential_loss = (g.pos.avg_price - stop_loss_price) * g.pos.qty
+        else: # short
+            potential_loss = (stop_loss_price - g.pos.avg_price) * g.pos.qty
+        
+        loss_pct = (potential_loss / equity) * 100
+        st.caption(f"예상 손실: ${potential_loss:,.2f} (자산의 {loss_pct:.1f}%)",
+                   help="현재 포지션에 대해 해당 가격에 손절매 시 예상되는 손실입니다.")
+        # 차트에 손절선 추가
+        fig.add_hline(y=stop_loss_price, line_color="red", line_dash="dash",
+                      annotation_text=f"Stop {stop_loss_price}", annotation_position="bottom right")
 
     b_col, s_col = st.columns(2)
     if b_col.button("매수", use_container_width=True):
@@ -231,7 +227,6 @@ with side_col:
     
     st.markdown("---")
 
-    # --- 게임 컨트롤 ---
     st.subheader("게임 진행")
     n_col, j_col, r_col = st.columns(3)
     if n_col.button("▶ 다음", use_container_width=True):
@@ -244,10 +239,9 @@ with side_col:
 
     st.markdown("---")
     
-    # --- 결과 요약 생성 함수 ---
-    def create_summary(log: list, ticker: str) -> dict: # [수정] ticker 인자 추가
+    def create_summary(log: list, ticker: str) -> dict:
         trades = [x for x in log if "pnl" in x]
-        summary = {"종목": ticker} # [추가] 결과에 종목명 추가
+        summary = {"종목": ticker}
         if not trades:
             summary["총 거래 횟수"] = 0
             return summary
@@ -275,13 +269,19 @@ with side_col:
         })
         return summary
 
-    # --- 게임 종료 버튼 ---
     if st.button("게임 종료 & 결과 보기", type="primary", use_container_width=True):
         if g.pos:
             g.flat()
         
-        # [수정] 결과 생성 시 g.ticker 전달
         st.session_state.last_summary = create_summary(g.log, g.ticker)
         st.session_state.pop("game", None)
         st.rerun()
-
+        
+# --- 차트 최종 렌더링 ---
+tick_step = max(len(sub) // 10, 1)
+fig.update_layout(xaxis=dict(tickmode="array", tickvals=sub.i[::tick_step], ticktext=sub.index.strftime("%y-%m-%d")[::tick_step], tickangle=0), xaxis_rangeslider_visible=False, hovermode="x unified", margin=dict(t=25, b=20, l=5, r=40))
+fig.update_yaxes(range=yrng, row=1, col=1)
+fig.update_xaxes(range=[start_i - 1, end_i + PAD])
+if "chart_slot" not in st.session_state:
+    st.session_state.chart_slot = chart_col.empty()
+st.session_state.chart_slot.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
