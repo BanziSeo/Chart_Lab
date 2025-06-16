@@ -53,10 +53,12 @@ def _today(self: GameState):
 
 
 def _next_candle(self: GameState):
-    if self.idx < len(self.df) - 1:
-        self.idx += 1
-        return True
-    return False
+    if self.idx >= len(self.df) - 1:
+        return False
+    if self.idx - self.start_idx >= 199:
+        return False
+    self.idx += 1
+    return True
 
 
 setattr(GameState, "today", property(_today))
@@ -157,6 +159,26 @@ def jump_random_date():
     if pool:
         g.idx, g.cash, g.pos, g.log = random.choice(pool), g.initial_cash, None, []
         st.session_state.view_n = 120
+        st.rerun()
+
+
+def _end_session():
+    g: GameState = st.session_state.game
+    summary = {
+        "ticker": g.ticker,
+        "start_cash": g.initial_cash,
+        "end_equity": round(g.equity, 2),
+        "return_pct": round((g.equity - g.initial_cash) / g.initial_cash * 100, 2),
+    }
+    st.session_state.last_summary = summary
+    st.session_state.game = None
+
+
+def advance_or_end():
+    if st.session_state.game.next_candle():
+        st.rerun()
+    else:
+        _end_session()
         st.rerun()
 
 # ─────────────────────────────── Landing page ─────────────────────────────────
@@ -304,8 +326,7 @@ def order_pct(side: str, pct: float) -> None:
         g.buy(qty)
     else:
         g.sell(qty)
-    g.idx += 1
-    st.rerun()
+    advance_or_end()
 
 buy25, buy50, buy100 = side_col.columns(3)
 sell25, sell50, sell100 = side_col.columns(3)
@@ -330,13 +351,10 @@ if sell100.button("매도 100%", use_container_width=True):
 
 if side_col.button("청산", use_container_width=True):
     g.flat()
-    g.idx += 1
-    st.rerun()
+    advance_or_end()
 
 if side_col.button("다음 봉", use_container_width=True):
-    if g.idx < len(g.df) - 1:
-        g.idx += 1
-        st.rerun()
+    advance_or_end()
 
 jump_col, model_col = side_col.columns(2)
 if jump_col.button("랜덤 점프", type="secondary", use_container_width=True):
