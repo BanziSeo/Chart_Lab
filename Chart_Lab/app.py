@@ -237,7 +237,7 @@ st.session_state.view_n = int(view_n)
 vis_df = ind_df.iloc[-st.session_state.view_n:]
 
 # --- plotting with trade markers --------------------------------------------
-# 기존 코드에 맞춰 Plotly 차트와 트레이딩 버튼을 구성한다.
+# Plotly candlestick chart with moving averages, volume and trade markers.
 
 fig = make_subplots(
     rows=2,
