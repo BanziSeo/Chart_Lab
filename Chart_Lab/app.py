@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 사이드바 레이아웃 변경, 손절선 렌더링 오류 최종 수정
+# 기능: 손절선 표시 오류 해결, MA 기본 색상 지정, 차트/볼륨 비율 조정
 
 import streamlit as st
 import pandas as pd
@@ -18,6 +18,13 @@ st.set_page_config(page_title="차트 훈련소", page_icon="📈", layout="wide
 
 # ----------------------------------- 상수 정의 -----------------------------------
 PAD, MARGIN = 20, 0.05  # x축 오른쪽 공백, y축 여유 비율
+# [추가] 이동평균선 기본 색상 지정
+MA_COLORS = {
+    ("EMA", 10): "red",
+    ("EMA", 21): "blue",
+    ("SMA", 50): "orange",
+    ("SMA", 200): "black",
+}
 
 # ---------------------------------- 캐싱 헬퍼 ----------------------------------
 @st.cache_data
@@ -154,12 +161,10 @@ with side_col:
     if r_col.button("📚 모델북", use_container_width=True):
         start_random_modelbook(g.initial_cash)
     
-    # [수정] 게임 종료 버튼을 게임 진행 섹션의 일부로 이동
     if st.button("게임 종료 & 결과 보기", type="primary", use_container_width=True):
         if g.pos:
             g.flat()
         
-        # 결과 요약 생성 로직
         trades = [x for x in g.log if "pnl" in x]
         summary = {"종목": g.ticker}
         if not trades:
@@ -269,16 +274,24 @@ with chart_col:
     span = ymax - ymin if ymax > ymin else 1
     yrng = [ymin - span * MARGIN, ymax + span * MARGIN]
 
+    # [수정] 차트/볼륨 비율 조정
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                        row_heights=[0.8, 0.2], vertical_spacing=0.02)
+                        row_heights=[0.7, 0.3], vertical_spacing=0.02)
     
-    for k, p in mas_tuple:
-        fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"], line=dict(width=1.5), name=f"{k}{p}", row=1, col=1)
+    # 이동평균선 그리기
+    for i, (k, p) in enumerate(mas_tuple):
+        # [수정] 기본 색상 적용
+        color = MA_COLORS.get((k, p))
+        fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"],
+                        line=dict(width=1.5, color=color), name=f"{k}{p}", row=1, col=1)
     
+    # 캔들스틱 그리기
     fig.add_candlestick(x=df_trade.i, open=df_trade.Open, high=df_trade.High, low=df_trade.Low, close=df_trade.Close, name="Price", row=1, col=1, increasing=dict(line=dict(color="black", width=1), fillcolor="white"), decreasing=dict(line=dict(color="black", width=1), fillcolor="black"))
     
+    # 볼륨 바 그리기
     fig.add_bar(x=df_trade.i, y=df_trade.Volume, name="Volume", row=2, col=1, marker_color='rgba(128,128,128,0.5)')
     
+    # 매매 화살표 그리기
     log_df = pd.DataFrame(g.log)
     if not log_df.empty:
         log_df = log_df[log_df.action.str.contains("ENTER")]
@@ -293,10 +306,12 @@ with chart_col:
                 fig.add_scatter(x=sell_df['i'], y=sell_df['High'] + span * 0.03, mode="markers",
                                 marker=dict(symbol="triangle-down", color="red", size=10), name="Sell", row=1, col=1)
 
+    # 손절선 그리기
     if g.pos and stop_loss_price > 0:
         fig.add_hline(y=stop_loss_price, line=dict(color="red", dash="dash", width=2),
                       annotation_text=f"Stop {stop_loss_price:.2f}", annotation_position="bottom right", row=1, col=1)
 
+    # 차트 레이아웃 최종 업데이트
     tick_step = max(len(sub) // 10, 1)
     fig.update_layout(
         height=chart_height,
