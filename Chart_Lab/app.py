@@ -305,6 +305,10 @@ if side_col.button("다음 봉", use_container_width=True):
         g.idx += 1
         st.rerun()
 
-if side_col.button("랜덤 점프", type="secondary", use_container_width=True):
+jump_col, model_col = side_col.columns(2)
+if jump_col.button("랜덤 점프", type="secondary", use_container_width=True):
     jump_random_date()
+
+if model_col.button("모델북 랜덤 교체", type="secondary", use_container_width=True):
+    start_random_modelbook(int(g.equity))
 
