@@ -51,7 +51,17 @@ def make_game(ticker: str, capital: int) -> GameState | None:
 
 
 def start_game(tkr: str, capital: int):
-    st.session_state.game = make_game(tkr, capital)
+    """Instantiate a GameState and store it in session_state.
+    If the ticker is unsuitable (too little data, or no random window),
+    inform the user instead of crashing.
+    """
+    game = make_game(tkr, capital)
+    if game is None:
+        st.error(f"`{tkr}` 종목은 5년치 이상 데이터가 없거나, 시작할 수 있는 랜덤 구간이 없습니다.
+다른 티커를 선택해 주세요.")
+        return
+
+    st.session_state.game = game
     st.session_state.view_n = 120
     st.session_state.last_summary = None
     st.rerun()
@@ -63,16 +73,24 @@ def load_modelbook(path: str) -> list[str]:
 
 
 def start_random_modelbook(capital: int):
-    """Pick a random ticker from `modelbook.txt` and start a new game.
-    - modelbook.txt must exist in the repo root (same level as this app.py)
-    - File contents: comma‑separated tickers, e.g.  GEV,NVDA,SMCI
-    Any blank/whitespace items or non‑alphabetic codes are discarded safely.
-    """
+    """Pick a random ticker from modelbook.txt that *can* actually start a game."""
     root = os.path.dirname(__file__)
     mb = os.path.join(root, "modelbook.txt")
     if not os.path.exists(mb):
         st.error("modelbook.txt 파일을 찾지 못했습니다.")
         return
+
+    tickers_raw = load_modelbook(mb)
+    tickers = [t for t in tickers_raw if t.isalpha()]
+    random.shuffle(tickers)  # shuffle so we try in random order
+
+    for tkr in tickers:
+        if make_game(tkr, capital):
+            start_game(tkr, capital)
+            return
+
+    st.error("모델북에 시작할 수 있는 유효한 티커가 없습니다.")
+    return
 
     tickers_raw = load_modelbook(mb)
     tickers = sorted({t for t in tickers_raw if t.isalpha()})
