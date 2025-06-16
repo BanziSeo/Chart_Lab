@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 마우스 추적 십자선, 차트 높이 조절 기능 추가 및 오류 수정
+# 기능: 부드러운 마우스 십자선, 손절선 표시 오류 수정
 
 import streamlit as st
 import pandas as pd
@@ -260,7 +260,6 @@ with chart_col:
     sub = df_trade[df_trade.i >= start_i]
     ma_cols_for_range = [f"{k}{p}" for k, p in mas_tuple]
     
-    # [수정] y축 범위 계산 시 손절선 가격 포함
     ymin = sub[["Low"] + ma_cols_for_range].min().min()
     ymax = sub[["High"] + ma_cols_for_range].max().max()
     if g.pos and stop_loss_price > 0:
@@ -279,21 +278,21 @@ with chart_col:
     fig.add_bar(x=df_trade.i, y=df_trade.Volume, name="Volume", row=2, col=1, marker_color='rgba(128,128,128,0.5)')
     
     if g.pos and stop_loss_price > 0:
-        fig.add_hline(y=stop_loss_price, line_color="red", line_dash="dash",
-                      annotation_text=f"Stop {stop_loss_price}", annotation_position="bottom right", row=1, col=1)
+        fig.add_hline(y=stop_loss_price, line=dict(color="red", dash="dash", width=2),
+                      annotation_text=f"Stop {stop_loss_price:.2f}", annotation_position="bottom right", row=1, col=1)
 
     tick_step = max(len(sub) // 10, 1)
     fig.update_layout(
-        height=chart_height,  # [수정] 사용자가 조절한 높이 적용
+        height=chart_height,
         xaxis=dict(tickmode="array", tickvals=sub.i[::tick_step], ticktext=sub.index.strftime("%y-%m-%d")[::tick_step], tickangle=0),
         xaxis_rangeslider_visible=False,
         hovermode="x unified",
         margin=dict(t=25, b=20, l=5, r=40),
-        # [추가] 십자선(spikes) 설정
         spikedistance=-1,
     )
-    fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across")
-    fig.update_yaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across")
+    # [수정] 십자선이 커서를 따라다니도록 spikesnap="cursor" 추가
+    fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
+    fig.update_yaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
 
     fig.update_yaxes(range=yrng, row=1, col=1)
     fig.update_xaxes(range=[start_i - 1, end_i + PAD])
