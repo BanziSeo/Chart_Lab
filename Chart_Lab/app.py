@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Chart Trainer – clean indentation (4 spaces only, no tabs)
+# Chart Trainer – clean indentation (4 spaces only, no tabs)
 
 import os
 import random
@@ -54,28 +54,38 @@ def load_modelbook(path: str) -> list[str]:
 
 
 def start_random_modelbook(capital: int):
+    """Pick a random ticker from `modelbook.txt` and start a new game.
+    - modelbook.txt must exist in the repo root (same level as this app.py)
+    - File contents: comma‑separated tickers, e.g.  GEV,NVDA,SMCI
+    Any blank/whitespace items or non‑alphabetic codes are discarded safely.
+    """
     root = os.path.dirname(__file__)
     mb = os.path.join(root, "modelbook.txt")
     if not os.path.exists(mb):
         st.error("modelbook.txt 파일을 찾지 못했습니다.")
         return
 
-    # ① 모델북 읽기
-    tickers = load_modelbook(mb)          # 이미 strip, upper 처리됨
+    # ① 파일 읽기 & 기본 전처리 (strip, upper)
+    tickers_raw = load_modelbook(mb)
 
-    # ② 유효한 알파벳 티커만 필터
-    tickers = [t for t in tickers if t.isalpha()]
+    # ② 알파벳으로만 이뤄진 티커만 남기고 중복 제거
+    tickers = sorted({t for t in tickers_raw if t.isalpha()})
 
     if not tickers:
         st.error("modelbook.txt 에 유효한 티커가 없습니다.")
         return
 
-    # ③ 시작
+    # ③ 무작위 종목으로 게임 시작
     start_game(random.choice(tickers), capital)
 
-
-
 def jump_random_date():
+    g: GameState = st.session_state.game
+    today = pd.Timestamp.today().normalize()
+    lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
+    pool = [i for i, d in enumerate(g.df.index) if lo <= d <= hi and i >= 120]
+    g.idx, g.cash, g.pos, g.log = random.choice(pool), g.initial_cash, None, []
+    st.session_state.view_n = 120
+    st.rerun()():
     g: GameState = st.session_state.game
     today = pd.Timestamp.today().normalize()
     lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
