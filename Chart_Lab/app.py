@@ -1,6 +1,6 @@
-# app.py (Ver. 2.9)
-# 기능: 1. on_click 콜백을 사용하여 버튼 클릭 로직을 안정화하고 StreamlitAPIException 해결.
-#      2. 현금 부족 시 '매수' 버튼 비활성화 기능 추가.
+# app.py (Ver. 3.0)
+# 기능: 1. 게임 시작에 필요한 최소 캔들 수를 120개에서 30개로 변경.
+#      2. 기본 표시 캔들 수도 30개로 조정.
 
 import streamlit as st
 import pandas as pd
@@ -19,6 +19,7 @@ st.set_page_config(page_title="차트 훈련소", page_icon="📈", layout="wide
 
 # ----------------------------------- 상수 정의 -----------------------------------
 PAD, MARGIN = 20, 0.05  # x축 오른쪽 공백, y축 여유 비율
+MIN_CANDLES = 30 # 최소 캔들 수 상수로 정의
 MA_COLORS = {
     ("EMA", 10): "red",
     ("EMA", 21): "blue",
@@ -41,7 +42,7 @@ def add_cached_indicators(df: pd.DataFrame, mas_tuple: tuple) -> pd.DataFrame:
 # --------------------------------- 게임 생성/시작 ---------------------------------
 def reset_session_state():
     """게임과 관련된 세션 상태를 초기화합니다."""
-    st.session_state.view_n = 120
+    st.session_state.view_n = MIN_CANDLES
     st.session_state.stop_loss_price = 0.0
     st.session_state.chart_height = 800
     st.session_state.ema_input = "10,21"
@@ -50,7 +51,7 @@ def reset_session_state():
 def initialize_state_if_missing():
     """세션 상태의 키가 비정상적으로 사라졌을 경우를 대비해 기본값으로 다시 초기화합니다."""
     defaults = {
-        "view_n": 120,
+        "view_n": MIN_CANDLES,
         "stop_loss_price": 0.0,
         "chart_height": 800,
         "ema_input": "10,21",
@@ -63,15 +64,15 @@ def initialize_state_if_missing():
 def create_game(tkr: str, capital: int) -> GameState | None:
     """새로운 게임 인스턴스를 생성합니다."""
     df = load_cached_price(tkr)
-    if df is None or len(df) < 120:
-        st.error(f"'{tkr}' 종목 데이터를 불러오지 못했거나 데이터가 너무 적습니다.")
+    if df is None or len(df) < MIN_CANDLES:
+        st.error(f"'{tkr}' 종목 데이터를 불러오지 못했거나 데이터가 너무 적습니다. (최소 {MIN_CANDLES}일 필요)")
         return None
 
     today = pd.Timestamp.today().normalize()
     lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
-    pool = [i for i, d in enumerate(df.index) if lo <= d <= hi and i >= 120]
+    pool = [i for i, d in enumerate(df.index) if lo <= d <= hi and i >= MIN_CANDLES]
     if not pool:
-        st.error(f"'{tkr}' 종목에서 시작 가능한 랜덤 구간을 찾지 못했습니다.")
+        st.error(f"'{tkr}' 종목에서 시작 가능한 랜덤 구간을 찾지 못했습니다. (최소 {MIN_CANDLES}개의 캔들 확보 필요)")
         return None
 
     return GameState(df=df, tkr=tkr, idx=random.choice(pool), start_cash=capital)
@@ -116,7 +117,7 @@ def jump_random_date():
     g: GameState = st.session_state.game
     today = pd.Timestamp.today().normalize()
     lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
-    pool = [i for i, d in enumerate(g.df.index) if lo <= d <= hi and i >= 120]
+    pool = [i for i, d in enumerate(g.df.index) if lo <= d <= hi and i >= MIN_CANDLES]
     if pool:
         g.idx, g.cash, g.pos, g.log = random.choice(pool), g.initial_cash, None, []
         reset_session_state()
@@ -179,7 +180,7 @@ with side_col:
 
         **2) 표시 캔들 수 (표시봉)**
         - 차트 하단에 한 번에 표시할 캔들의 개수를 조절합니다.
-        - 기본값은 120개입니다.
+        - 기본값은 30개입니다.
 
         **3) 줌인 / 줌아웃**
         - 차트 영역을 더블클릭하면 전체 기간이 표시됩니다.
@@ -210,9 +211,6 @@ with side_col:
     st.markdown("---")
     st.subheader("게임 진행")
     
-    # ==================================================================
-    # ✨ 버그 수정 및 기능 개선: 버튼 로직을 on_click 콜백으로 변경
-    # ==================================================================
     def on_click_next():
         g.next_candle()
         if not g.pos:
@@ -308,7 +306,7 @@ with chart_col:
 
     st.number_input(
         "표시봉",
-        min_value=50,
+        min_value=MIN_CANDLES,
         max_value=len(df_trade),
         step=10,
         key="view_n",
