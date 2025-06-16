@@ -36,6 +36,7 @@ class GameState:
     def __init__(self, df: pd.DataFrame, idx: int, start_cash: int = 100_000, tkr: Optional[str] = None) -> None:
         self.df = df
         self.idx = idx
+        self.start_idx = idx
         self.initial_cash = start_cash
         self.cash = float(start_cash)
         self.pos: Optional[Position] = None
@@ -48,8 +49,10 @@ class GameState:
         return self.df.index[self.idx]
 
     def next_candle(self) -> bool:
-        """Advance to the next bar. Returns False if at the end."""
+        """Advance to the next bar. Returns False if at the end or limit."""
         if self.idx + 1 >= len(self.df):
+            return False
+        if self.idx - self.start_idx >= 199:
             return False
         self.idx += 1
         return True
