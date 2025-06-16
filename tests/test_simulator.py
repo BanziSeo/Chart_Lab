@@ -46,3 +46,39 @@ def test_next_candle_and_today():
     first_day = g.today
     g.next_candle()
     assert g.today > first_day
+
+
+
+def test_avg_price_accumulates():
+    df = make_df()
+    g = GameState(df, idx=0, start_cash=1000)
+    g.buy(1)
+    g.next_candle()
+    g.buy(1)
+    assert g.pos.qty == 2
+    assert g.avg_price == 102.5
+    g.next_candle()
+    g.flat()
+    assert g.cash == 1015
+
+def make_big_df(n=210):
+    data = {
+        "Open": list(range(100, 100 + n)),
+        "High": list(range(101, 101 + n)),
+        "Low": list(range(99, 99 + n)),
+        "Close": list(range(100, 100 + n)),
+        "Volume": [1000] * n,
+    }
+    idx = pd.date_range("2020-01-01", periods=n)
+    return pd.DataFrame(data, index=idx)
+
+
+def test_start_idx_and_limit():
+    df = make_big_df()
+    g = GameState(df, idx=5, start_cash=1000)
+    assert g.start_idx == 5
+    for _ in range(199):
+        assert g.next_candle()
+    assert not g.next_candle()
+    assert g.idx - g.start_idx == 199
+

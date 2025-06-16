@@ -36,11 +36,13 @@ class GameState:
     def __init__(self, df: pd.DataFrame, idx: int, start_cash: int = 100_000, tkr: Optional[str] = None) -> None:
         self.df = df
         self.idx = idx
+        self.start_idx = idx
         self.initial_cash = start_cash
         self.cash = float(start_cash)
         self.pos: Optional[Position] = None
         self.log: List[Dict[str, Any]] = []
         self.ticker = tkr.upper() if tkr else ""
+        self._avg_price: Optional[float] = None
 
     @property
     def today(self) -> pd.Timestamp:
@@ -48,8 +50,10 @@ class GameState:
         return self.df.index[self.idx]
 
     def next_candle(self) -> bool:
-        """Advance to the next bar. Returns False if at the end."""
+        """Advance to the next bar. Returns False if at the end or limit."""
         if self.idx + 1 >= len(self.df):
+            return False
+        if self.idx - self.start_idx >= 199:
             return False
         self.idx += 1
         return True
@@ -57,11 +61,26 @@ class GameState:
     def _price(self) -> float:
         return float(self.df.Close.iloc[self.idx])
 
+    @property
+    def avg_price(self) -> Optional[float]:
+        """Average entry price of the current position, if any."""
+        return self._avg_price if self.pos else None
+
     def buy(self, qty: int) -> None:
-        """Enter a long position at the current price."""
+        """Enter or add to a long position at the current price."""
         price = self._price()
-        self.pos = Position("long", qty, price)
-        self.log.append({"date": self.today, "action": "ENTER LONG", "price": price, "qty": qty})
+        if self.pos and self.pos.side == "long" and self._avg_price is not None:
+            total_qty = self.pos.qty + qty
+            total_cost = self._avg_price * self.pos.qty + price * qty
+            self.pos.qty = total_qty
+            self._avg_price = total_cost / total_qty
+            self.pos.entry = self._avg_price
+            action = "ADD LONG"
+        else:
+            self.pos = Position("long", qty, price)
+            self._avg_price = price
+            action = "ENTER LONG"
+        self.log.append({"date": self.today, "action": action, "price": price, "qty": qty})
 
     def sell(self, qty: int) -> None:
         """Enter a short position at the current price."""
@@ -78,6 +97,7 @@ class GameState:
         self.cash += pnl
         self.log.append({"date": self.today, "action": "EXIT", "price": price, "pnl": pnl})
         self.pos = None
+        self._avg_price = None
 
     @property
     def equity(self) -> float:
