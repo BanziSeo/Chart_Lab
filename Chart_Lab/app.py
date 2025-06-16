@@ -239,7 +239,7 @@ dates = vis_df.index
 x_vals = dates
 
 # --- plotting with trade markers --------------------------------------------
-# 기존 코드에 맞춰 Plotly 차트와 트레이딩 버튼을 구성한다.
+# Plotly candlestick chart with moving averages, volume and trade markers.
 
 fig = make_subplots(
     rows=2,
