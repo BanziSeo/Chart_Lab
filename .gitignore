@@ -1,0 +1,26 @@
+# ▼ 가상환경
+venv/
+env/
+
+# ▼ 파이썬 임시 캐시
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ▼ 빌드 산출물
+build/
+dist/
+*.egg-info/
+
+# ▼ IDE 설정파일
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# ▼ 데이터·백테스트 CSV (원한다면 개별 포함)
+Chart_Lab/data/*.csv
+
+# ▼ 기타 로그·임시
+*.log
+*.tmp
