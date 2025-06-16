@@ -83,12 +83,19 @@ class GameState:
         self.log.append({"date": self.today, "action": "ENTER SHORT", "price": price_now, "qty": qty})
 
     def flat(self):
-        """보유 포지션을 전량 청산합니다."""
-        if not self.pos:
-            return
-            
-        price_now = self.df.Close.iloc[self.idx]
-        pnl = self.pos.close(price_now)
-        self.cash += pnl
-        self.log.append({"date": self.today, "action": "EXIT", "price": price_now, "pnl": pnl})
-        self.pos = None
+    """보유 포지션을 전량 청산하고 수수료를 차감합니다."""
+    if not self.pos:
+        return
+
+    price_now = self.df.Close.iloc[self.idx]
+    pnl = self.pos.close(price_now)
+
+    # 수수료 계산 (매매대금에 대해 부과, 여기서는 pnl을 대금의 근사치로 사용)
+    # 정확한 계산을 원하면 (entry_price * qty) + (exit_price * qty) 를 기준으로 해야 합니다.
+    # 여기서는 단순화를 위해 손익(pnl)의 절대값을 기준으로 계산합니다.
+    trade_value = self.pos.qty * price_now # 실제 매도 대금
+    fee = trade_value * 0.0014  # 0.14%
+
+    self.cash += (pnl - fee)  # 실현 손익에서 수수료를 차감
+    self.log.append({"date": self.today, "action": "EXIT", "price": price_now, "pnl": pnl, "fee": -fee})
+    self.pos = None

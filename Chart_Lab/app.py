@@ -163,7 +163,11 @@ for k, p in mas_tuple:
 
 # 캔들차트 그리기
 fig.add_candlestick(x=df_trade.i, open=df_trade.Open, high=df_trade.High,
-                    low=df_trade.Low, close=df_trade.Close, name="Price", row=1, col=1)
+                    low=df_trade.Low, close=df_trade.Close, name="Price", row=1, col=1,
+                    increasing=dict(line=dict(color="black", width=1),
+                                    fillcolor="white"),  # 양봉 속을 흰색으로 변경
+                    decreasing=dict(line=dict(color="black", width=1),
+                                    fillcolor="black"))
 
 # 거래량 차트 그리기
 fig.add_bar(x=df_trade.i, y=df_trade.Volume, name="Volume", row=2, col=1)
