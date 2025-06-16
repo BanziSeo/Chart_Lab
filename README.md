@@ -13,13 +13,17 @@ Launch the app with Streamlit:
 ```bash
 streamlit run Chart_Lab/app.py
 ```
-You can also run the `run_app.bat` script on Windows which sets up a virtual
-environment, installs dependencies and starts the app for you.
+You can also use the provided helper scripts which set up a virtual
+environment, install dependencies and then start the app:
+
+- Windows: `run_app.bat`
+- Linux/macOS: `./run_app.sh`
 
 ## Helper scripts
 - **run_app.bat** – Creates a local virtual environment under `venv`, installs
   dependencies from `Chart_Lab/requirements.txt` and runs the Streamlit
   application.
+- **run_app.sh** – Same as `run_app.bat` but for Unix-like systems.
 - **update_repo.bat** – Simplifies committing and pushing changes. It stages all
   files, asks for a commit message, pulls the latest `main` with rebase and then
   pushes your commits.
