@@ -235,6 +235,8 @@ if "view_n" not in st.session_state:
 view_n = chart_col.number_input("표시봉", 50, len(ind_df), st.session_state.view_n, 10)
 st.session_state.view_n = int(view_n)
 vis_df = ind_df.iloc[-st.session_state.view_n:]
+dates = vis_df.index
+x_vals = dates
 
 # --- plotting with trade markers --------------------------------------------
 # 기존 코드에 맞춰 Plotly 차트와 트레이딩 버튼을 구성한다.
@@ -247,6 +249,8 @@ fig = make_subplots(
     row_heights=[0.7, 0.3],
 )
 fig.update_yaxes(fixedrange=True, row=1, col=1)
+ticktexts = dates.strftime("%Y-%m-%d")
+fig.update_xaxes(type="category", tickvals=x_vals, ticktext=ticktexts)
 
 fig.add_trace(
     go.Candlestick(
