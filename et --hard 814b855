@@ -1,0 +1,30 @@
+[33m026e810[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m HEAD@{0}: pull --rebase origin main (finish): returning to refs/heads/main
+[33m026e810[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m HEAD@{1}: pull --rebase origin main (pick): 1224
+[33m7d8c4b3[m HEAD@{2}: pull --rebase origin main (start): checkout 7d8c4b377294dbd82e1f41e470a989e16f91654c
+[33m814b855[m HEAD@{3}: commit: 1224
+[33m4fd3a91[m HEAD@{4}: commit: 2057
+[33mac12363[m HEAD@{5}: commit: 2021
+[33m06d6a28[m HEAD@{6}: commit: 1948
+[33ma92d623[m HEAD@{7}: commit: 1946
+[33m881abb7[m HEAD@{8}: commit: 1944
+[33m900894f[m HEAD@{9}: commit: 1943
+[33m7c7daed[m HEAD@{10}: commit: 1942
+[33m32cd019[m HEAD@{11}: commit: 1942
+[33m029fd1f[m HEAD@{12}: commit: 1939
+[33mea840d2[m HEAD@{13}: commit: 1937
+[33m6dfba91[m HEAD@{14}: pull --rebase origin main (finish): returning to refs/heads/main
+[33m6dfba91[m HEAD@{15}: pull --rebase origin main (pick): 1933
+[33m28825f3[m HEAD@{16}: pull --rebase origin main (pick): 1930
+[33mcf42224[m HEAD@{17}: pull --rebase origin main (pick): 1929
+[33m5a6c23d[m HEAD@{18}: pull --rebase origin main (start): checkout 5a6c23d79975c28454c61809cf87bb890fe0f7e4
+[33m43e07da[m HEAD@{19}: commit: 1933
+[33mb6142c2[m HEAD@{20}: commit: 1930
+[33mb475320[m HEAD@{21}: commit: 1929
+[33mce479ce[m HEAD@{22}: commit: 1925
+[33m6b5d1e6[m HEAD@{23}: commit: 1923
+[33m588421d[m HEAD@{24}: commit: 1921
+[33m186dd6b[m HEAD@{25}: commit: fix: rename MODELBOOK.txt to modelbook.txt (case-sensitive)
+[33m3b0853d[m HEAD@{26}: commit: 1907
+[33m51ade63[m HEAD@{27}: commit: add proper .gitignore
+[33m4d0ddf8[m HEAD@{28}: Branch: renamed refs/heads/master to refs/heads/main
+[33m4d0ddf8[m HEAD@{30}: commit (initial): Initial commit - Chart_Lab

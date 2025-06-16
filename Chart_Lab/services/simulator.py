@@ -1,14 +1,15 @@
 # ──────────────────── services/simulator.py (핵심 변경) ────────────────────
 """Only the modified parts are shown – rest of the class stays the same."""
 class GameState:
-    def __init__(self, df, idx: int, start_cash: int = 100_000):
+    # __init__ 함수의 파라미터 목록에 tkr: str 을 추가합니다.
+    def __init__(self, df, idx: int, start_cash: int, tkr: str):
         self.df = df
+        self.ticker = tkr  # 파라미터로 받은 tkr을 self.ticker에 할당
         self.idx = idx
         self.initial_cash = start_cash
         self.cash = start_cash
-        self.pos = None  # Position object or None
+        self.pos = None
         self.log = []
-        self.ticker       = tkr          # ★ 추가
 
     # ... today, next_candle methods unchanged ...
 
