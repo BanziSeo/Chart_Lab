@@ -1,5 +1,5 @@
-# app.py (Ver. 2.6)
-# 기능: 1. 매매 시 발생하는 KeyError 버그 수정. 2. 가격-볼륨 차트 구분선 추가.
+# app.py (Ver. 2.7)
+# 기능: 1. 매매 기록 표시 로직(merge)의 KeyError 최종 수정. 2. 코드 안정성 확보.
 
 import streamlit as st
 import pandas as pd
@@ -325,9 +325,9 @@ with chart_col:
     if not log_df.empty:
         log_df = log_df[log_df.action.str.contains("ENTER")]
         # ==================================================================
-        # ✨ 버그 수정: merge의 기준 열 이름을 'date'에서 'Date'로 변경
+        # ✨ 최종 버그 수정: left_on='date', right_on='Date'로 명시적 지정
         # ==================================================================
-        merged = log_df.merge(df_trade.reset_index(), on='Date', how='inner')
+        merged = pd.merge(log_df, df_trade.reset_index(), left_on='date', right_on='Date', how='inner')
         if not merged.empty:
             buy_df = merged[merged.action.str.contains("LONG")]
             sell_df = merged[merged.action.str.contains("SHORT")]
@@ -339,9 +339,6 @@ with chart_col:
     if st.session_state.stop_loss_price > 0:
         fig.add_hline(y=st.session_state.stop_loss_price, line_dash="dash", line_color="red", line_width=2, annotation_text="손절 라인", annotation_position="bottom right", annotation_font_size=12, annotation_font_color="red", row=1, col=1)
     
-    # ==================================================================
-    # ✨ 새로운 기능: 가격 차트와 볼륨 차트 사이에 구분선 추가
-    # ==================================================================
     fig.update_layout(
         height=st.session_state.chart_height,
         xaxis_rangeslider_visible=False,
