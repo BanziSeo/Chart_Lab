@@ -1,3 +1,7 @@
+# [중요!] IndentationError (들여쓰기 오류)가 발생하면, 이 파일을 편집기에서 연 후
+# Ctrl+A (전체 선택)를 누르고 Shift+Alt+F (자동 서식 지정)를 눌러주세요.
+# 코드를 복사/붙여넣기 할 때 들여쓰기가 깨지는 경우가 많습니다.
+
 # app.py (최종 통합본)
 # 기능: 할로우 캔들, 수수료, 결과 분석 페이지 적용
 
@@ -293,4 +297,3 @@ with side_col:
         st.session_state.last_summary = create_summary(g.log)
         st.session_state.pop("game", None)
         st.rerun()
-
