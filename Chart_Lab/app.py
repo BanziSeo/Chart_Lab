@@ -1,6 +1,6 @@
-# app.py (Ver. 3.3)
-# 기능: 1. '날짜 변경' 또는 '다음' 클릭 시, 표시 캔들 수 등 사용자 설정이 초기화되지 않도록 수정.
-#      2. 차트 설정은 새로운 게임 시작 시에만 초기화됨.
+# app.py (Ver. 3.4)
+# 기능: 1. 상장 직후 차트에서 발생하는 표시 캔들 수 관련 오류를 최종 수정.
+#      2. 차트 표시 로직의 안정성을 강화.
 
 import streamlit as st
 import pandas as pd
@@ -12,10 +12,9 @@ import plotly.graph_objects as go
 # services 폴더의 모듈들을 정확히 임포트합니다.
 from services.data_loader import get_price
 from services.indicators import add_mas
-# from services.simulator import GameState, Position # 이제 이 파일에서 직접 관리합니다.
 
 # ------------------------------ Streamlit 페이지 설정 ------------------------------
-st.set_page_config(page_title="차트 훈련소", page_icon=" ", layout="wide")
+st.set_page_config(page_title="차트 훈련소", page_icon="📈", layout="wide")
 
 # ----------------------------------- 상수 정의 -----------------------------------
 PAD, MARGIN = 20, 0.05
@@ -30,13 +29,11 @@ MA_COLORS = {
 }
 
 # --------------------------------- 핵심 로직 클래스 ---------------------------------
-# 참고: 기능 추가를 위해 services/simulator.py의 내용을 app.py로 가져왔습니다.
 class Position:
     """매매 포지션을 관리하는 클래스"""
     def __init__(self, side: str, entry_qty: int, entry_price: float, current_pos=None):
         self.side = side
         if current_pos and current_pos.side == self.side:
-            # 물타기 (평균 단가 계산)
             current_value = current_pos.avg_price * current_pos.qty
             entry_value = entry_price * entry_qty
             total_qty = current_pos.qty + entry_qty
@@ -61,7 +58,6 @@ class GameState:
         self.initial_cash, self.cash = start_cash, start_cash
         self.pos: Position | None = None
         self.log = []
-
         self.start_idx = idx
         self.idx = idx
         self.max_duration = max_duration
@@ -69,30 +65,24 @@ class GameState:
 
     @property
     def today(self): return self.df.index[self.idx]
-
     @property
     def candles_passed(self): return self.idx - self.start_idx
-
     @property
     def is_over(self):
         end_of_duration = self.candles_passed >= self.max_duration
         end_of_data = self.idx >= len(self.df) - 1
         return end_of_duration or end_of_data
-
     def next_candle(self):
         if not self.is_over: self.idx += 1
-
     def buy(self, qty: int):
         price_now = self.df.Close.iloc[self.idx]
         self.cash -= (price_now * qty)
         self.pos = Position("long", qty, price_now, self.pos)
         self.log.append({"date": self.today, "action": "ENTER LONG", "price": price_now, "qty": qty})
-
     def sell(self, qty: int):
         price_now = self.df.Close.iloc[self.idx]
         self.pos = Position("short", qty, price_now, self.pos)
         self.log.append({"date": self.today, "action": "ENTER SHORT", "price": price_now, "qty": qty})
-
     def flat(self):
         if not self.pos: return
         price_now = self.df.Close.iloc[self.idx]
@@ -122,31 +112,21 @@ def reset_session_state():
     st.session_state.sma_input = "50,200"
 
 def initialize_state_if_missing():
-    defaults = {
-        "view_n": DEFAULT_VIEW_CANDLES,
-        "stop_loss_price": 0.0,
-        "chart_height": 800,
-        "ema_input": "10,21",
-        "sma_input": "50,200",
-    }
+    defaults = { "view_n": DEFAULT_VIEW_CANDLES, "stop_loss_price": 0.0, "chart_height": 800, "ema_input": "10,21", "sma_input": "50,200",}
     for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+        if key not in st.session_state: st.session_state[key] = value
 
 def create_game(tkr: str, capital: int) -> GameState | None:
     df = load_cached_price(tkr)
     if df is None or len(df) < MIN_HISTORY_DAYS:
         st.error(f"'{tkr}' 종목 데이터를 불러오지 못했거나 데이터가 너무 적습니다. (최소 {MIN_HISTORY_DAYS}일 필요)")
         return None
-
     today = pd.Timestamp.today().normalize()
     lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
     pool = [i for i, d in enumerate(df.index) if lo <= d <= hi]
-    
     if not pool:
         st.error(f"'{tkr}' 종목에서 시작 가능한 랜덤 구간을 찾지 못했습니다. (훈련 구간: 1년~5년 전)")
         return None
-
     return GameState(df=df, tkr=tkr, idx=random.choice(pool), start_cash=capital)
 
 def start_game(tkr: str, capital: int):
@@ -160,8 +140,7 @@ def start_game(tkr: str, capital: int):
 def start_random_modelbook(capital: int):
     root = os.path.dirname(__file__)
     path = os.path.join(root, "..", "modelbook.txt")
-    if not os.path.exists(path):
-        path = os.path.join(root, "modelbook.txt")
+    if not os.path.exists(path): path = os.path.join(root, "modelbook.txt")
     if not os.path.exists(path): st.error("modelbook.txt 파일을 찾지 못했습니다."); return
     with open(path, "r", encoding="utf-8") as f:
         tickers = [t.strip().upper() for t in f.read().split(",")]
@@ -184,11 +163,9 @@ def jump_random_date():
     pool = [i for i, d in enumerate(g.df.index) if lo <= d <= hi]
     if pool:
         g.idx = random.choice(pool)
-        g.start_idx = g.idx # 시작점 재설정
+        g.start_idx = g.idx
         g.start_date = g.df.index[g.start_idx]
         g.cash, g.pos, g.log = g.initial_cash, None, []
-        
-        # ✨ 기능 개선: 사용자 설정(표시봉, 차트 높이 등)은 유지하고 게임 관련 상태만 초기화
         st.session_state.stop_loss_price = 0.0
         st.rerun()
 
@@ -250,8 +227,7 @@ with side_col:
     st.markdown("---")
     st.subheader("게임 진행")
     
-    # ✨ 기능 개선: 게임 진행 상황 표시
-    st.progress(g.candles_passed / (g.max_duration -1), text=f"{g.candles_passed + 1} / {g.max_duration} 캔들")
+    st.progress(g.candles_passed / (g.max_duration -1) if g.max_duration > 1 else 1, text=f"{g.candles_passed + 1} / {g.max_duration} 캔들")
 
     def on_click_next():
         g.next_candle()
@@ -270,7 +246,6 @@ with side_col:
     if st.button("게임 종료 & 결과 보기", type="primary", use_container_width=True):
         if g.pos: g.flat()
         trades = [x for x in g.log if "pnl" in x]
-        # ✨ 기능 개선: 결과에 연도 추가
         year = g.start_date.year
         summary = {"종목": f"{g.ticker} ({year}년)"}
         if not trades: summary["총 거래 횟수"] = 0
@@ -318,7 +293,6 @@ with side_col:
 
 # -------------- 차트 UI --------------
 with chart_col:
-    # (차트 UI 로직은 이전과 동일하므로 생략)
     ma_cols = st.columns(2)
     st.text_input("EMA 기간(쉼표)", key="ema_input")
     st.text_input("SMA 기간(쉼표)", key="sma_input")
@@ -331,20 +305,36 @@ with chart_col:
                                   .loc[visible_df_with_ma.Volume > 0]
                                   .assign(i=lambda d: range(len(d))))
     if df_trade.empty: st.error("표시할 데이터가 없습니다."); st.stop()
+
+    # ✨ 최종 버그 수정: 표시봉 개수 입력 위젯의 로직을 안정화
+    max_candles = len(df_trade)
+    min_candles = 10 # 캔들 수가 적을 때를 대비한 최소값
+
+    if max_candles < min_candles:
+        min_candles = max_candles
+    
+    if 'view_n' not in st.session_state or st.session_state.view_n is None:
+        st.session_state.view_n = DEFAULT_VIEW_CANDLES
+    
+    st.session_state.view_n = max(min_candles, min(st.session_state.view_n, max_candles))
+    
     st.number_input(
-        "표시봉", min_value=30, max_value=len(df_trade), step=10,
-        key="view_n", label_visibility="collapsed"
+        "표시봉", min_value=min_candles, max_value=max_candles,
+        step=10, key="view_n", label_visibility="collapsed"
     )
     view_n = st.session_state.view_n
+
     start_i = df_trade.i.iloc[max(0, len(df_trade) - view_n)]
     end_i = df_trade.i.iloc[-1]
     sub = df_trade[df_trade.i >= start_i]
+    
     ma_cols_for_range = [f"{k}{p}" for k, p in mas_tuple]
     ymin = sub[["Low"] + ma_cols_for_range].min().min()
     ymax = sub[["High"] + ma_cols_for_range].max().max()
     span = ymax - ymin if ymax > ymin else 1
     price_yrange = [ymin - span * MARGIN, ymax + span * MARGIN]
     volume_yrange = [0, sub['Volume'].max() * 1.2]
+    
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.02)
     for i, (k, p) in enumerate(mas_tuple):
         color = MA_COLORS.get((k, p))
@@ -368,10 +358,10 @@ with chart_col:
         stop_loss_line = dict(type='line', xref='paper', yref='y', x0=0, y0=st.session_state.stop_loss_price, x1=1, y1=st.session_state.stop_loss_price, line=dict(color='black', width=2, dash='dash'))
         shapes.append(stop_loss_line)
         fig.add_annotation(x=end_i + PAD, y=st.session_state.stop_loss_price, text="손절 라인", showarrow=False, xanchor="right", yanchor="bottom", font=dict(color="black", size=12))
+    
     fig.update_layout(height=st.session_state.chart_height, xaxis_rangeslider_visible=False, hovermode="x unified", margin=dict(t=25, b=20, l=5, r=40), spikedistance=-1, shapes=shapes)
     fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor", range=[start_i - 1, end_i + PAD])
     fig.update_yaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
     fig.update_yaxes(range=price_yrange, row=1, col=1)
     fig.update_yaxes(range=volume_yrange, row=2, col=1)
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
- 
