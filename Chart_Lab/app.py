@@ -65,27 +65,17 @@ def start_random_modelbook(capital: int):
         st.error("modelbook.txt 파일을 찾지 못했습니다.")
         return
 
-    # ① 파일 읽기 & 기본 전처리 (strip, upper)
     tickers_raw = load_modelbook(mb)
-
-    # ② 알파벳으로만 이뤄진 티커만 남기고 중복 제거
     tickers = sorted({t for t in tickers_raw if t.isalpha()})
 
     if not tickers:
         st.error("modelbook.txt 에 유효한 티커가 없습니다.")
         return
 
-    # ③ 무작위 종목으로 게임 시작
     start_game(random.choice(tickers), capital)
 
+
 def jump_random_date():
-    g: GameState = st.session_state.game
-    today = pd.Timestamp.today().normalize()
-    lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
-    pool = [i for i, d in enumerate(g.df.index) if lo <= d <= hi and i >= 120]
-    g.idx, g.cash, g.pos, g.log = random.choice(pool), g.initial_cash, None, []
-    st.session_state.view_n = 120
-    st.rerun()():
     g: GameState = st.session_state.game
     today = pd.Timestamp.today().normalize()
     lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
