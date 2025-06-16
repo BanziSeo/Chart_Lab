@@ -209,6 +209,8 @@ if "view_n" not in st.session_state:
 view_n = chart_col.number_input("표시봉", 50, len(ind_df), st.session_state.view_n, 10)
 st.session_state.view_n = int(view_n)
 vis_df = ind_df.iloc[-st.session_state.view_n:]
+x_vals = list(range(1, len(vis_df) + 1))
+dates = vis_df.index
 
 # --- plotting (unchanged) ...
 # 기존 코드에 맞춰 Plotly 차트와 트레이딩 버튼을 구성한다.
@@ -223,11 +225,14 @@ fig = make_subplots(
 
 fig.add_trace(
     go.Candlestick(
-        x=vis_df.index,
+        x=x_vals,
         open=vis_df.Open,
         high=vis_df.High,
         low=vis_df.Low,
         close=vis_df.Close,
+        customdata=dates.strftime("%Y-%m-%d"),
+        hovertemplate=
+        "Date=%{customdata}<br>Open=%{open}<br>High=%{high}<br>Low=%{low}<br>Close=%{close}<extra></extra>",
         name="Price",
     ),
     row=1,
@@ -236,13 +241,13 @@ fig.add_trace(
 
 for col in [c for c in vis_df.columns if c.startswith(("EMA", "SMA"))]:
     fig.add_trace(
-        go.Scatter(x=vis_df.index, y=vis_df[col], name=col, line=dict(width=1)),
+        go.Scatter(x=x_vals, y=vis_df[col], name=col, line=dict(width=1)),
         row=1,
         col=1,
     )
 
 fig.add_trace(
-    go.Bar(x=vis_df.index, y=vis_df.Volume, name="Volume"),
+    go.Bar(x=x_vals, y=vis_df.Volume, name="Volume"),
     row=2,
     col=1,
 )
@@ -252,6 +257,7 @@ fig.update_layout(
     xaxis_rangeslider_visible=False,
     margin=dict(t=40, b=20, l=10, r=10),
 )
+fig.update_xaxes(type="category")
 
 chart_col.plotly_chart(fig, use_container_width=True)
 
