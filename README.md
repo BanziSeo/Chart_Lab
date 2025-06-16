@@ -40,3 +40,11 @@ which data is available.
 - **update_repo.bat** – Simplifies committing and pushing changes. It stages all
   files, asks for a commit message, pulls the latest `main` with rebase and then
   pushes your commits.
+
+## Testing
+Run the test suite to verify the simulator logic:
+
+```bash
+pip install -r Chart_Lab/requirements.txt
+pytest -q
+```

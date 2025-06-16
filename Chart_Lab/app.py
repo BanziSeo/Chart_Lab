@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import random
-from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -25,7 +24,7 @@ import streamlit as st
 
 from services.data_loader import get_price
 from services.indicators import add_mas
-from services.simulator import GameState
+from services.simulator import GameState, trade_summary
 
 # --- minimal helpers for incomplete simulator implementation
 class Position:
@@ -54,10 +53,12 @@ def _today(self: GameState):
 
 
 def _next_candle(self: GameState):
-    if self.idx < len(self.df) - 1:
-        self.idx += 1
-        return True
-    return False
+    if self.idx >= len(self.df) - 1:
+        return False
+    if self.idx - self.start_idx >= 199:
+        return False
+    self.idx += 1
+    return True
 
 
 setattr(GameState, "today", property(_today))
@@ -94,13 +95,12 @@ def make_game(ticker: str, capital: int) -> GameState | None:
     if df is None or len(df) < 120:
         return None
 
-    today = pd.Timestamp.today().normalize()
-    lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
-    pool = [i for i, d in enumerate(df.index) if lo <= d <= hi and i >= 120]
-    if not pool:
+    start_min = 50
+    start_max = len(df) - 100
+    if start_min >= start_max:
         return None
 
-    start_idx = random.choice(pool)
+    start_idx = random.randint(start_min, start_max)
     return GameState(df, idx=start_idx, start_cash=capital, tkr=ticker.upper())
 
 
@@ -161,6 +161,40 @@ def jump_random_date():
         st.session_state.view_n = 120
         st.rerun()
 
+
+
+def end_game() -> None:
+    """Finish the current game and store a summary in session_state."""
+    g: GameState = st.session_state.game
+
+    # Make sure any open position is closed
+    if g.pos:
+        g.flat()
+
+    st.session_state.last_summary = trade_summary(g)
+    del st.session_state["game"]
+    st.rerun()
+=======
+def _end_session():
+    g: GameState = st.session_state.game
+    summary = {
+        "ticker": g.ticker,
+        "start_cash": g.initial_cash,
+        "end_equity": round(g.equity, 2),
+        "return_pct": round((g.equity - g.initial_cash) / g.initial_cash * 100, 2),
+    }
+    st.session_state.last_summary = summary
+    st.session_state.game = None
+
+
+def advance_or_end():
+    if st.session_state.game.next_candle():
+        st.rerun()
+    else:
+        _end_session()
+        st.rerun()
+
+
 # ─────────────────────────────── Landing page ─────────────────────────────────
 
 if "game" not in st.session_state:
@@ -194,6 +228,9 @@ mas = [("EMA", int(p)) for p in ema_txt.split(',') if p.strip().isdigit()] + \
       [("SMA", int(p)) for p in sma_txt.split(',') if p.strip().isdigit()]
 mas_tuple = tuple((k, p, True) for k, p in mas)  # 3rd bool=plot flag
 
+# default colors for common moving averages
+ma_colors = {"EMA10": "red", "EMA21": "blue", "SMA50": "orange", "SMA200": "black"}
+
 # --- data & indicators
 df_price = load_price(g.ticker)
 if df_price is None:
@@ -203,17 +240,25 @@ if df_price is None:
 ind_df = add_indicators(df_price, mas_tuple).iloc[: g.idx + 1]
 price_now = ind_df.Close.iloc[-1]
 
+# --- current equity metric
+side_col.metric("총 자산($)", f"{g.equity:,.0f}")
+
 # --- view window len
 if "view_n" not in st.session_state:
     st.session_state.view_n = 120
 view_n = chart_col.number_input("표시봉", 50, len(ind_df), st.session_state.view_n, 10)
 st.session_state.view_n = int(view_n)
 vis_df = ind_df.iloc[-st.session_state.view_n:]
+
 x_vals = list(range(1, len(vis_df) + 1))
 dates = vis_df.index
 
-# --- plotting (unchanged) ...
-# 기존 코드에 맞춰 Plotly 차트와 트레이딩 버튼을 구성한다.
+dates = vis_df.index
+x_vals = dates
+
+
+# --- plotting with trade markers --------------------------------------------
+# Plotly candlestick chart with moving averages, volume and trade markers.
 
 fig = make_subplots(
     rows=2,
@@ -222,6 +267,9 @@ fig = make_subplots(
     vertical_spacing=0.03,
     row_heights=[0.7, 0.3],
 )
+fig.update_yaxes(fixedrange=True, row=1, col=1)
+ticktexts = dates.strftime("%Y-%m-%d")
+fig.update_xaxes(type="category", tickvals=x_vals, ticktext=ticktexts)
 
 fig.add_trace(
     go.Candlestick(
@@ -234,6 +282,10 @@ fig.add_trace(
         hovertemplate=
         "Date=%{customdata}<br>Open=%{open}<br>High=%{high}<br>Low=%{low}<br>Close=%{close}<extra></extra>",
         name="Price",
+        increasing_line_color="black",
+        increasing_fillcolor="rgba(0,0,0,0)",
+        decreasing_line_color="black",
+        decreasing_fillcolor="black",
     ),
     row=1,
     col=1,
@@ -241,10 +293,55 @@ fig.add_trace(
 
 for col in [c for c in vis_df.columns if c.startswith(("EMA", "SMA"))]:
     fig.add_trace(
+
         go.Scatter(x=x_vals, y=vis_df[col], name=col, line=dict(width=1)),
+
+        go.Scatter(
+            x=vis_df.index,
+            y=vis_df[col],
+            name=col,
+            line=dict(width=1, color=ma_colors.get(col, "gray")),
+        ),
+
         row=1,
         col=1,
     )
+
+
+if g.pos is not None and g.avg_price is not None:
+    fig.add_hline(y=g.avg_price, line=dict(color="orange", dash="dash"), row=1, col=1)
+
+# --- trade markers
+buy_events = [e for e in g.log if e.get("action") == "ENTER LONG"]
+sell_events = [e for e in g.log if e.get("action") == "ENTER SHORT"]
+
+fig.add_trace(
+    go.Scatter(
+        x=[e["date"] for e in buy_events],
+        y=[e["price"] for e in buy_events],
+        mode="markers",
+        marker_symbol="triangle-up",
+        marker_color="green",
+        marker_size=10,
+        name="Buy",
+    ),
+    row=1,
+    col=1,
+)
+
+fig.add_trace(
+    go.Scatter(
+        x=[e["date"] for e in sell_events],
+        y=[e["price"] for e in sell_events],
+        mode="markers",
+        marker_symbol="triangle-down",
+        marker_color="red",
+        marker_size=10,
+        name="Sell",
+    ),
+    row=1,
+    col=1,
+)
 
 fig.add_trace(
     go.Bar(x=x_vals, y=vis_df.Volume, name="Volume"),
@@ -257,33 +354,72 @@ fig.update_layout(
     xaxis_rangeslider_visible=False,
     margin=dict(t=40, b=20, l=10, r=10),
 )
+
 fig.update_xaxes(type="category")
+
+fig.update_xaxes(
+    type="date",
+    tickformat="%Y-%m-%d",
+    rangebreaks=[dict(bounds=["sat", "mon"])]
+)
+
 
 chart_col.plotly_chart(fig, use_container_width=True)
 
-qty = side_col.number_input("수량", 1, 1000, 1)
-btn_buy, btn_sell, btn_flat = side_col.columns(3)
+def order_pct(side: str, pct: float) -> None:
+    """Execute order for percentage of current buying power."""
+    price = g.df.Close.iloc[g.idx]
+    qty = int(g.cash / price * pct)
+    if qty <= 0:
+        st.warning("주문 수량이 0입니다.")
+        return
+    if side == "buy":
+        g.buy(qty)
+    else:
+        g.sell(qty)
+    advance_or_end()
 
-if btn_buy.button("매수", use_container_width=True):
-    g.buy(int(qty))
-    g.idx += 1
-    st.rerun()
+buy25, buy50, buy100 = side_col.columns(3)
+sell25, sell50, sell100 = side_col.columns(3)
 
-if btn_sell.button("매도", use_container_width=True):
-    g.sell(int(qty))
-    g.idx += 1
-    st.rerun()
+if buy25.button("매수 25%", use_container_width=True):
+    order_pct("buy", 0.25)
 
-if btn_flat.button("청산", use_container_width=True):
+if buy50.button("매수 50%", use_container_width=True):
+    order_pct("buy", 0.5)
+
+if buy100.button("매수 100%", use_container_width=True):
+    order_pct("buy", 1.0)
+
+if sell25.button("매도 25%", use_container_width=True):
+    order_pct("sell", 0.25)
+
+if sell50.button("매도 50%", use_container_width=True):
+    order_pct("sell", 0.5)
+
+if sell100.button("매도 100%", use_container_width=True):
+    order_pct("sell", 1.0)
+
+if side_col.button("청산", use_container_width=True):
     g.flat()
-    g.idx += 1
-    st.rerun()
+    advance_or_end()
 
 if side_col.button("다음 봉", use_container_width=True):
-    if g.idx < len(g.df) - 1:
-        g.idx += 1
-        st.rerun()
+    advance_or_end()
 
-if side_col.button("랜덤 점프", type="secondary", use_container_width=True):
+jump_col, model_col = side_col.columns(2)
+if jump_col.button("랜덤 점프", type="secondary", use_container_width=True):
     jump_random_date()
+
+if model_col.button("모델북 랜덤 교체", type="secondary", use_container_width=True):
+    start_random_modelbook(int(g.equity))
+
+
+if side_col.button("게임 종료", type="secondary", use_container_width=True):
+    end_game()
+
+new_tkr = side_col.text_input("새 티커 입력", "")
+if side_col.button("티커 변경", type="secondary", use_container_width=True) and new_tkr.strip():
+    start_game(new_tkr.upper(), int(g.equity))
+
 
