@@ -23,5 +23,5 @@ if not exist venv (
 )
 
 REM 3. 스트림릿 실행
-python -m streamlit run "%ROOT%Chart_lab\app.py"
+python -m streamlit run "%ROOT%Chart_Lab\app.py"
 pause
