@@ -1,14 +1,15 @@
 # ──────────────────── services/simulator.py (핵심 변경) ────────────────────
 """Only the modified parts are shown – rest of the class stays the same."""
 class GameState:
-    def __init__(self, df, idx: int, start_cash: int = 100_000):
+    def __init__(self, df, idx: int, start_cash: int = 100_000, tkr: str | None = None):
         self.df = df
         self.idx = idx
         self.initial_cash = start_cash
         self.cash = start_cash
         self.pos = None  # Position object or None
         self.log = []
-        self.ticker       = tkr          # ★ 추가
+        # store the ticker symbol if provided
+        self.ticker = tkr if tkr is not None else ""
 
     # ... today, next_candle methods unchanged ...
 
