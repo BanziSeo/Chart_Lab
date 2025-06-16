@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 사이드바 레이아웃 순서 변경
+# 기능: 손절선 렌더링 오류 최종 수정
 
 import streamlit as st
 import pandas as pd
@@ -126,23 +126,24 @@ if "game" not in st.session_state:
 g: GameState = st.session_state.game
 chart_col, side_col = st.columns([7, 3])
 
-# --- 사이드바 위젯 값 미리 가져오기 ---
+# [수정] 사이드바 로직을 먼저 실행하여 모든 사용자 입력을 변수에 저장
 with side_col:
     # --- 상태 정보 ---
-    pos_val = g.pos.qty * (g.df.Close.iloc[g.idx]) if g.pos else 0
+    price_now = g.df.Close.iloc[g.idx]
+    pos_val = g.pos.qty * price_now if g.pos else 0
     equity = g.cash + pos_val
-    unreal = (g.df.Close.iloc[g.idx] - g.pos.avg_price) * g.pos.qty if g.pos and g.pos.side == 'long' else (g.pos.avg_price - g.df.Close.iloc[g.idx]) * g.pos.qty if g.pos and g.pos.side == 'short' else 0
+    unreal = (price_now - g.pos.avg_price) * g.pos.qty if g.pos and g.pos.side == 'long' else (g.pos.avg_price - price_now) * g.pos.qty if g.pos and g.pos.side == 'short' else 0
     
     st.subheader("종목: ???")
     st.metric("현재 평가자산", f"${equity:,.2f}", f"${unreal:,.2f} 미실현")
     st.text(f"현금: ${g.cash:,.2f}")
-    st.text(f"현재가(종가): ${g.df.Close.iloc[g.idx]:,.2f}")
+    st.text(f"현재가(종가): ${price_now:,.2f}")
     if g.pos:
         st.text(f"포지션: {g.pos.side.upper()} {g.pos.qty}주 @ ${g.pos.avg_price:,.2f}")
 
     st.markdown("---")
 
-    # --- [수정] 게임 진행 섹션을 위로 이동 ---
+    # --- 게임 진행 ---
     st.subheader("게임 진행")
     n_col, j_col, r_col = st.columns(3)
     if n_col.button("▶ 다음", use_container_width=True):
@@ -159,7 +160,7 @@ with side_col:
     st.subheader("매매")
     amount = st.number_input("수량(주)", min_value=1, value=10, step=1)
     
-    order_value = amount * g.df.Close.iloc[g.idx]
+    order_value = amount * price_now
     position_pct = (order_value / equity) * 100 if equity > 0 else 0
     st.caption(f"주문 금액: ${order_value:,.2f} (자산의 {position_pct:.1f}%)")
 
@@ -192,12 +193,12 @@ with side_col:
     
     st.markdown("---")
     
-    # --- [수정] 차트 설정 섹션을 아래로 이동 ---
+    # --- 차트 설정 ---
     st.subheader("차트 설정")
     chart_height = st.slider("차트 높이", min_value=400, max_value=1200, value=800, step=50)
 
     st.markdown("---")
-
+    
     def create_summary(log: list, ticker: str) -> dict:
         trades = [x for x in log if "pnl" in x]
         summary = {"종목": ticker}
@@ -228,7 +229,7 @@ with side_col:
         st.session_state.pop("game", None)
         st.rerun()
 
-# ---------------------------------- 차트 그리기 ----------------------------------
+# [수정] 차트 그리기를 모든 입력값을 받은 후 마지막에 실행
 with chart_col:
     ma_cols = st.columns(2)
     ema_in = ma_cols[0].text_input("EMA 기간(쉼표)", "10,21")
@@ -272,7 +273,13 @@ with chart_col:
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                         row_heights=[0.8, 0.2], vertical_spacing=0.02)
     
-    # [수정] 매매 화살표 로직 추가
+    for k, p in mas_tuple:
+        fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"], line=dict(width=1.5), name=f"{k}{p}", row=1, col=1)
+    
+    fig.add_candlestick(x=df_trade.i, open=df_trade.Open, high=df_trade.High, low=df_trade.Low, close=df_trade.Close, name="Price", row=1, col=1, increasing=dict(line=dict(color="black", width=1), fillcolor="white"), decreasing=dict(line=dict(color="black", width=1), fillcolor="black"))
+    
+    fig.add_bar(x=df_trade.i, y=df_trade.Volume, name="Volume", row=2, col=1, marker_color='rgba(128,128,128,0.5)')
+    
     log_df = pd.DataFrame(g.log)
     if not log_df.empty:
         log_df = log_df[log_df.action.str.contains("ENTER")]
@@ -282,16 +289,11 @@ with chart_col:
             sell_df = merged[merged.action.str.contains("SHORT")]
             if not buy_df.empty:
                 fig.add_scatter(x=buy_df['i'], y=buy_df['Low'] - span * 0.03, mode="markers",
-                                marker=dict(symbol="triangle-up", color="green", size=10), name="Buy")
+                                marker=dict(symbol="triangle-up", color="green", size=10), name="Buy", row=1, col=1)
             if not sell_df.empty:
                 fig.add_scatter(x=sell_df['i'], y=sell_df['High'] + span * 0.03, mode="markers",
-                                marker=dict(symbol="triangle-down", color="red", size=10), name="Sell")
+                                marker=dict(symbol="triangle-down", color="red", size=10), name="Sell", row=1, col=1)
 
-    for k, p in mas_tuple:
-        fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"], line=dict(width=1.5), name=f"{k}{p}", row=1, col=1)
-    fig.add_candlestick(x=df_trade.i, open=df_trade.Open, high=df_trade.High, low=df_trade.Low, close=df_trade.Close, name="Price", row=1, col=1, increasing=dict(line=dict(color="black", width=1), fillcolor="white"), decreasing=dict(line=dict(color="black", width=1), fillcolor="black"))
-    fig.add_bar(x=df_trade.i, y=df_trade.Volume, name="Volume", row=2, col=1, marker_color='rgba(128,128,128,0.5)')
-    
     if g.pos and stop_loss_price > 0:
         fig.add_hline(y=stop_loss_price, line=dict(color="red", dash="dash", width=2),
                       annotation_text=f"Stop {stop_loss_price:.2f}", annotation_position="bottom right", row=1, col=1)
