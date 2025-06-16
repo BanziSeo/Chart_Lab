@@ -161,6 +161,26 @@ def jump_random_date():
         st.session_state.view_n = 120
         st.rerun()
 
+
+def end_game() -> None:
+    """Close any open position and save a performance summary."""
+    g: GameState = st.session_state.game
+    g.flat()
+
+    trades = [e["pnl"] for e in g.log if e.get("action") == "EXIT"]
+    wins = sum(1 for p in trades if p > 0)
+    total_pnl = g.cash - g.initial_cash
+    summary = {
+        "ticker": g.ticker,
+        "total_pnl": round(total_pnl, 2),
+        "max_pnl": round(max(trades), 2) if trades else 0.0,
+        "win_rate": round(wins / len(trades) * 100, 2) if trades else 0.0,
+    }
+
+    st.session_state.last_summary = summary
+    del st.session_state.game
+    st.rerun()
+
 # ─────────────────────────────── Landing page ─────────────────────────────────
 
 if "game" not in st.session_state:
@@ -311,4 +331,7 @@ if jump_col.button("랜덤 점프", type="secondary", use_container_width=True):
 
 if model_col.button("모델북 랜덤 교체", type="secondary", use_container_width=True):
     start_random_modelbook(int(g.equity))
+
+if side_col.button("게임 종료", type="secondary", use_container_width=True):
+    end_game()
 
