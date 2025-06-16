@@ -27,6 +27,44 @@ from services.data_loader import get_price
 from services.indicators import add_mas
 from services.simulator import GameState
 
+# --- minimal helpers for incomplete simulator implementation
+class Position:
+    """Simple position tracker used by GameState methods."""
+
+    def __init__(self, side: str, qty: int, entry: float, prev=None):
+        self.side = side
+        self.qty = qty
+        self.entry = entry
+        self.prev = prev
+
+    def close(self, px: float) -> float:
+        return (px - self.entry) * self.qty if self.side == "long" else (
+            self.entry - px
+        ) * self.qty
+
+    def market_value(self, px: float) -> float:
+        return self.close(px)
+
+    def unreal(self, px: float) -> float:
+        return self.close(px)
+
+
+def _today(self: GameState):
+    return self.df.index[self.idx]
+
+
+def _next_candle(self: GameState):
+    if self.idx < len(self.df) - 1:
+        self.idx += 1
+        return True
+    return False
+
+
+setattr(GameState, "today", property(_today))
+setattr(GameState, "next_candle", _next_candle)
+import services.simulator as _sim
+_sim.Position = Position
+
 # ────────────────────────────── Streamlit config ───────────────────────────────
 
 st.set_page_config(page_title="차트 훈련소", page_icon="📈", layout="wide")
@@ -173,4 +211,73 @@ st.session_state.view_n = int(view_n)
 vis_df = ind_df.iloc[-st.session_state.view_n:]
 
 # --- plotting (unchanged) ...
-# (이하 기존 plot / 버튼 로직 동일 – 생략)
+# 기존 코드에 맞춰 Plotly 차트와 트레이딩 버튼을 구성한다.
+
+fig = make_subplots(
+    rows=2,
+    cols=1,
+    shared_xaxes=True,
+    vertical_spacing=0.03,
+    row_heights=[0.7, 0.3],
+)
+
+fig.add_trace(
+    go.Candlestick(
+        x=vis_df.index,
+        open=vis_df.Open,
+        high=vis_df.High,
+        low=vis_df.Low,
+        close=vis_df.Close,
+        name="Price",
+    ),
+    row=1,
+    col=1,
+)
+
+for col in [c for c in vis_df.columns if c.startswith(("EMA", "SMA"))]:
+    fig.add_trace(
+        go.Scatter(x=vis_df.index, y=vis_df[col], name=col, line=dict(width=1)),
+        row=1,
+        col=1,
+    )
+
+fig.add_trace(
+    go.Bar(x=vis_df.index, y=vis_df.Volume, name="Volume"),
+    row=2,
+    col=1,
+)
+
+fig.update_layout(
+    height=600,
+    xaxis_rangeslider_visible=False,
+    margin=dict(t=40, b=20, l=10, r=10),
+)
+
+chart_col.plotly_chart(fig, use_container_width=True)
+
+qty = side_col.number_input("수량", 1, 1000, 1)
+btn_buy, btn_sell, btn_flat = side_col.columns(3)
+
+if btn_buy.button("매수", use_container_width=True):
+    g.buy(int(qty))
+    g.idx += 1
+    st.rerun()
+
+if btn_sell.button("매도", use_container_width=True):
+    g.sell(int(qty))
+    g.idx += 1
+    st.rerun()
+
+if btn_flat.button("청산", use_container_width=True):
+    g.flat()
+    g.idx += 1
+    st.rerun()
+
+if side_col.button("다음 봉", use_container_width=True):
+    if g.idx < len(g.df) - 1:
+        g.idx += 1
+        st.rerun()
+
+if side_col.button("랜덤 점프", type="secondary", use_container_width=True):
+    jump_random_date()
+
