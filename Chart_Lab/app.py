@@ -161,6 +161,31 @@ def jump_random_date():
         st.session_state.view_n = 120
         st.rerun()
 
+
+def completed_trades(log: list[dict]) -> list[dict]:
+    """Return list of completed trades paired from ``g.log`` entries."""
+    trades: list[dict] = []
+    entry: dict | None = None
+    for rec in log:
+        action = rec.get("action", "")
+        if action.startswith("ENTER"):
+            entry = rec
+        elif action == "EXIT" and entry:
+            side = "long" if "LONG" in entry.get("action", "") else "short"
+            qty = entry.get("qty", 0)
+            pnl = rec.get("pnl", 0.0)
+            trades.append(
+                {
+                    "date": rec.get("date"),
+                    "side": side,
+                    "qty": qty,
+                    "pnl": pnl,
+                    "승/패": "승" if pnl > 0 else "패",
+                }
+            )
+            entry = None
+    return trades
+
 # ─────────────────────────────── Landing page ─────────────────────────────────
 
 if "game" not in st.session_state:
@@ -311,4 +336,8 @@ if jump_col.button("랜덤 점프", type="secondary", use_container_width=True):
 
 if model_col.button("모델북 랜덤 교체", type="secondary", use_container_width=True):
     start_random_modelbook(int(g.equity))
+
+trades = completed_trades(g.log)
+if trades:
+    side_col.dataframe(pd.DataFrame(trades), use_container_width=True)
 
