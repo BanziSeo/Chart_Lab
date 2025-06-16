@@ -1,6 +1,6 @@
-# app.py (Ver. 3.4)
-# 기능: 1. 상장 직후 차트에서 발생하는 표시 캔들 수 관련 오류를 최종 수정.
-#      2. 차트 표시 로직의 안정성을 강화.
+# app.py (Ver. 3.5)
+# 기능: 1. '전량 청산' 시 투자 원금이 사라지는 치명적인 버그를 수정.
+#      2. 자금 관리 로직을 안정화.
 
 import streamlit as st
 import pandas as pd
@@ -83,13 +83,24 @@ class GameState:
         price_now = self.df.Close.iloc[self.idx]
         self.pos = Position("short", qty, price_now, self.pos)
         self.log.append({"date": self.today, "action": "ENTER SHORT", "price": price_now, "qty": qty})
+        
     def flat(self):
         if not self.pos: return
         price_now = self.df.Close.iloc[self.idx]
         pnl = self.pos.close(price_now)
         trade_value = self.pos.qty * price_now
         fee = trade_value * 0.0014
-        self.cash += (pnl - fee)
+
+        # ==================================================================
+        # ✨ 치명적 버그 수정: 청산 시 자금 계산 로직 수정
+        # ==================================================================
+        if self.pos.side == 'long':
+            # Long 포지션 청산: (매도한 금액 - 수수료) 만큼 현금 증가
+            self.cash += trade_value - fee
+        else: # short
+            # Short 포지션 청산: (실현 손익 - 수수료) 만큼 현금 변동
+            self.cash += pnl - fee
+        
         self.log.append({"date": self.today, "action": "EXIT", "price": price_now, "pnl": pnl, "fee": -fee})
         self.pos = None
 
@@ -306,9 +317,8 @@ with chart_col:
                                   .assign(i=lambda d: range(len(d))))
     if df_trade.empty: st.error("표시할 데이터가 없습니다."); st.stop()
 
-    # ✨ 최종 버그 수정: 표시봉 개수 입력 위젯의 로직을 안정화
     max_candles = len(df_trade)
-    min_candles = 10 # 캔들 수가 적을 때를 대비한 최소값
+    min_candles = 10 
 
     if max_candles < min_candles:
         min_candles = max_candles
