@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 손절선 렌더링 오류 최종 수정
+# 기능: 사이드바 레이아웃 변경, 손절선 렌더링 오류 최종 수정
 
 import streamlit as st
 import pandas as pd
@@ -153,6 +153,37 @@ with side_col:
         jump_random_date()
     if r_col.button("📚 모델북", use_container_width=True):
         start_random_modelbook(g.initial_cash)
+    
+    # [수정] 게임 종료 버튼을 게임 진행 섹션의 일부로 이동
+    if st.button("게임 종료 & 결과 보기", type="primary", use_container_width=True):
+        if g.pos:
+            g.flat()
+        
+        # 결과 요약 생성 로직
+        trades = [x for x in g.log if "pnl" in x]
+        summary = {"종목": g.ticker}
+        if not trades:
+            summary["총 거래 횟수"] = 0
+        else:
+            total_pnl = sum(x["pnl"] for x in trades)
+            total_fees = sum(x.get("fee", 0) for x in trades)
+            net_pnl = total_pnl + total_fees
+            wins = [x for x in trades if x["pnl"] > 0]
+            losses = [x for x in trades if x["pnl"] <= 0]
+            win_rate = len(wins) / len(trades) * 100 if trades else 0
+            avg_win = sum(t['pnl'] for t in wins) / len(wins) if wins else 0
+            avg_loss = abs(sum(t['pnl'] for t in losses)) / len(losses) if losses else 0
+            profit_factor = avg_win / avg_loss if avg_loss > 0 else float('inf')
+            summary.update({
+                "최종 순손익": f"${net_pnl:,.2f}", "총 거래 횟수": f"{len(trades)}회",
+                "승률": f"{win_rate:.2f}%", "손익비 (Profit Factor)": f"{profit_factor:.2f}",
+                "평균 수익": f"${avg_win:,.2f}", "평균 손실": f"${avg_loss:,.2f}",
+                "총 수수료": f"${abs(total_fees):,.2f}",
+            })
+        
+        st.session_state.last_summary = summary
+        st.session_state.pop("game", None)
+        st.rerun()
 
     st.markdown("---")
 
@@ -196,38 +227,6 @@ with side_col:
     # --- 차트 설정 ---
     st.subheader("차트 설정")
     chart_height = st.slider("차트 높이", min_value=400, max_value=1200, value=800, step=50)
-
-    st.markdown("---")
-    
-    def create_summary(log: list, ticker: str) -> dict:
-        trades = [x for x in log if "pnl" in x]
-        summary = {"종목": ticker}
-        if not trades:
-            summary["총 거래 횟수"] = 0
-            return summary
-        total_pnl = sum(x["pnl"] for x in trades)
-        total_fees = sum(x.get("fee", 0) for x in trades)
-        net_pnl = total_pnl + total_fees
-        wins = [x for x in trades if x["pnl"] > 0]
-        losses = [x for x in trades if x["pnl"] <= 0]
-        win_rate = len(wins) / len(trades) * 100 if trades else 0
-        avg_win = sum(t['pnl'] for t in wins) / len(wins) if wins else 0
-        avg_loss = abs(sum(t['pnl'] for t in losses)) / len(losses) if losses else 0
-        profit_factor = avg_win / avg_loss if avg_loss > 0 else float('inf')
-        summary.update({
-            "최종 순손익": f"${net_pnl:,.2f}", "총 거래 횟수": f"{len(trades)}회",
-            "승률": f"{win_rate:.2f}%", "손익비 (Profit Factor)": f"{profit_factor:.2f}",
-            "평균 수익": f"${avg_win:,.2f}", "평균 손실": f"${avg_loss:,.2f}",
-            "총 수수료": f"${abs(total_fees):,.2f}",
-        })
-        return summary
-
-    if st.button("게임 종료 & 결과 보기", type="primary", use_container_width=True):
-        if g.pos:
-            g.flat()
-        st.session_state.last_summary = create_summary(g.log, g.ticker)
-        st.session_state.pop("game", None)
-        st.rerun()
 
 # [수정] 차트 그리기를 모든 입력값을 받은 후 마지막에 실행
 with chart_col:
