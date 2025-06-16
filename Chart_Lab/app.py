@@ -1,5 +1,6 @@
-# app.py (Ver. 2.8)
-# 기능: 1. 손절 라인(검은 점선)과 차트 구분선(검은 실선) 스타일 분리. 2. 라인 표시 로직 안정화.
+# app.py (Ver. 2.9)
+# 기능: 1. on_click 콜백을 사용하여 버튼 클릭 로직을 안정화하고 StreamlitAPIException 해결.
+#      2. 현금 부족 시 '매수' 버튼 비활성화 기능 추가.
 
 import streamlit as st
 import pandas as pd
@@ -208,15 +209,25 @@ with side_col:
 
     st.markdown("---")
     st.subheader("게임 진행")
-    n_col, j_col, r_col = st.columns(3)
-    if n_col.button("▶ 다음", use_container_width=True):
+    
+    # ==================================================================
+    # ✨ 버그 수정 및 기능 개선: 버튼 로직을 on_click 콜백으로 변경
+    # ==================================================================
+    def on_click_next():
         g.next_candle()
-        if not g.pos: st.session_state.stop_loss_price = 0.0
-        st.rerun()
-    if j_col.button("🎲 날짜 변경", use_container_width=True):
+        if not g.pos:
+            st.session_state.stop_loss_price = 0.0
+
+    def on_click_jump():
         jump_random_date()
-    if r_col.button("📚 모델북", use_container_width=True):
+
+    def on_click_modelbook():
         start_random_modelbook(g.initial_cash)
+        
+    n_col, j_col, r_col = st.columns(3)
+    n_col.button("▶ 다음", use_container_width=True, on_click=on_click_next)
+    j_col.button("🎲 날짜 변경", use_container_width=True, on_click=on_click_jump)
+    r_col.button("📚 모델북", use_container_width=True, on_click=on_click_modelbook)
     
     if st.button("게임 종료 & 결과 보기", type="primary", use_container_width=True):
         if g.pos: g.flat()
@@ -254,18 +265,25 @@ with side_col:
             st.caption(f"↳ 베팅 리스크 (매도): ${total_risk_short:,.2f} ({risk_pct_short:.2f}%)")
 
     st.number_input("손절매 가격", key="stop_loss_price", format="%.2f", step=0.01)
+    
+    def on_click_buy(qty):
+        g.buy(qty)
 
-    b_col, s_col = st.columns(2)
-    if b_col.button("매수", use_container_width=True):
-        if g.cash >= order_value: g.buy(amount); st.rerun()
-        else: st.warning("현금이 부족합니다.")
-            
-    if s_col.button("매도/공매도", use_container_width=True): g.sell(amount); st.rerun()
-            
-    if st.button("전량 청산", use_container_width=True) and g.pos:
+    def on_click_sell(qty):
+        g.sell(qty)
+        
+    def on_click_flat():
         g.flat()
         st.session_state.stop_loss_price = 0.0
-        st.rerun()
+
+    b_col, s_col = st.columns(2)
+    can_buy = g.cash >= order_value
+    b_col.button("매수", use_container_width=True, on_click=on_click_buy, args=(amount,), disabled=not can_buy)
+    s_col.button("매도/공매도", use_container_width=True, on_click=on_click_sell, args=(amount,))
+    if not can_buy:
+        b_col.caption("현금이 부족합니다.")
+            
+    st.button("전량 청산", use_container_width=True, on_click=on_click_flat, disabled=not g.pos)
     
     st.markdown("---")
     st.subheader("차트 설정")
@@ -333,13 +351,7 @@ with chart_col:
             if not sell_df.empty:
                 fig.add_scatter(x=sell_df['i'], y=sell_df['High'] + span * 0.03, mode="markers", marker=dict(symbol="triangle-down", color="red", size=10), name="Sell", row=1, col=1)
 
-    # ==================================================================
-    # ✨ 버그 수정 및 기능 개선: 라인 그리기 로직 변경
-    # ==================================================================
-    # 1. 차트 레이아웃에 추가할 도형들을 담을 리스트를 먼저 생성합니다.
     shapes = []
-    
-    # 2. 가격-볼륨 차트 구분선을 도형 리스트에 추가합니다. (검은 실선)
     separator_line = dict(
         type='line', xref='paper', yref='paper',
         x0=0, y0=0.3, x1=1, y1=0.3,
@@ -347,16 +359,14 @@ with chart_col:
     )
     shapes.append(separator_line)
 
-    # 3. 손절매 가격이 있을 경우, 손절 라인을 도형 리스트에 추가합니다. (검은 점선)
     if st.session_state.stop_loss_price > 0:
         stop_loss_line = dict(
-            type='line', xref='paper', yref='y', # y축은 가격 데이터 기준
+            type='line', xref='paper', yref='y',
             x0=0, y0=st.session_state.stop_loss_price,
             x1=1, y1=st.session_state.stop_loss_price,
             line=dict(color='black', width=2, dash='dash')
         )
         shapes.append(stop_loss_line)
-        # 손절 라인 옆에 텍스트 주석도 별도로 추가합니다.
         fig.add_annotation(
             x=end_i + PAD, y=st.session_state.stop_loss_price,
             text="손절 라인", showarrow=False,
@@ -364,14 +374,13 @@ with chart_col:
             font=dict(color="black", size=12)
         )
     
-    # 4. 최종적으로 완성된 도형 리스트를 차트 레이아웃에 한 번에 업데이트합니다.
     fig.update_layout(
         height=st.session_state.chart_height,
         xaxis_rangeslider_visible=False,
         hovermode="x unified",
         margin=dict(t=25, b=20, l=5, r=40),
         spikedistance=-1,
-        shapes=shapes # shapes 리스트를 레이아웃에 적용
+        shapes=shapes
     )
 
     fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor", range=[start_i - 1, end_i + PAD])
