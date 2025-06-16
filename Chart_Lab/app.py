@@ -1,5 +1,5 @@
-# app.py (최종 통합본)
-# 기능: 리스크 계산 UI/UX 개선
+# app.py (Ver. 2.1)
+# 기능: 사용자가 입력한 손절매 가격을 차트에 수평 점선으로 표시
 
 import streamlit as st
 import pandas as pd
@@ -28,10 +28,12 @@ MA_COLORS = {
 # ---------------------------------- 캐싱 헬퍼 ----------------------------------
 @st.cache_data
 def load_cached_price(ticker: str) -> pd.DataFrame | None:
+    """yfinance로 가격 데이터를 로드하고 캐시합니다."""
     return get_price(ticker)
 
 @st.cache_data
 def add_cached_indicators(df: pd.DataFrame, mas_tuple: tuple) -> pd.DataFrame:
+    """계산된 이동평균선을 데이터프레임에 추가하고 캐시합니다."""
     mas_settings = [(kind, period, True) for kind, period in mas_tuple]
     return add_mas(df.copy(), mas_settings)
 
@@ -45,6 +47,7 @@ def reset_session_state():
     st.session_state.sma_input = "50,200"
 
 def create_game(tkr: str, capital: int) -> GameState | None:
+    """새로운 게임 인스턴스를 생성합니다."""
     df = load_cached_price(tkr)
     if df is None or len(df) < 120:
         st.error(f"'{tkr}' 종목 데이터를 불러오지 못했거나 데이터가 너무 적습니다.")
@@ -60,6 +63,7 @@ def create_game(tkr: str, capital: int) -> GameState | None:
     return GameState(df=df, tkr=tkr, idx=random.choice(pool), start_cash=capital)
 
 def start_game(tkr: str, capital: int):
+    """지정된 티커로 새 게임을 시작합니다."""
     game = create_game(tkr, capital)
     if game:
         st.session_state.game = game
@@ -68,10 +72,13 @@ def start_game(tkr: str, capital: int):
         st.rerun()
 
 def start_random_modelbook(capital: int):
+    """modelbook.txt에서 랜덤 티커로 새 게임을 시작합니다."""
+    # 경로 탐색 로직 (상대 경로 문제 해결)
     root = os.path.dirname(__file__)
     path = os.path.join(root, "..", "modelbook.txt")
     if not os.path.exists(path):
         path = os.path.join(root, "modelbook.txt")
+        
     if not os.path.exists(path):
         st.error("modelbook.txt 파일을 찾지 못했습니다."); return
     
@@ -88,10 +95,11 @@ def start_random_modelbook(capital: int):
             st.session_state.last_summary = None
             reset_session_state()
             st.rerun()
-            return
+            return # 유효한 게임을 찾으면 즉시 종료
     st.error("모델북에 시작 가능한 유효한 티커가 없습니다.")
 
 def jump_random_date():
+    """게임 내에서 랜덤한 날짜로 점프합니다."""
     g: GameState = st.session_state.game
     today = pd.Timestamp.today().normalize()
     lo, hi = today - pd.DateOffset(years=5), today - pd.DateOffset(years=1)
@@ -105,6 +113,7 @@ def jump_random_date():
 if "game" not in st.session_state:
     st.header("📈 차트 훈련소")
     
+    # 지난 게임 결과가 있으면 표시
     if st.session_state.get("last_summary"):
         st.markdown("---")
         summary = st.session_state.last_summary
@@ -135,10 +144,13 @@ if "game" not in st.session_state:
 g: GameState = st.session_state.game
 chart_col, side_col = st.columns([7, 3])
 
+# stop_loss_price 초기화 (안정성)
 if 'stop_loss_price' not in st.session_state:
     st.session_state.stop_loss_price = 0.0
 
+# -------------- 사이드바 UI --------------
 with side_col:
+    # 계좌 상태 표시
     price_now = g.df.Close.iloc[g.idx]
     pos_val = g.pos.qty * price_now if g.pos else 0
     equity = g.cash + pos_val
@@ -151,6 +163,7 @@ with side_col:
     if g.pos:
         st.text(f"포지션: {g.pos.side.upper()} {g.pos.qty}주 @ ${g.pos.avg_price:,.2f}")
 
+    # 게임 진행 컨트롤
     st.markdown("---")
     st.subheader("게임 진행")
     n_col, j_col, r_col = st.columns(3)
@@ -163,20 +176,29 @@ with side_col:
     if r_col.button("📚 모델북", use_container_width=True):
         start_random_modelbook(g.initial_cash)
     
+    # 게임 종료
     if st.button("게임 종료 & 결과 보기", type="primary", use_container_width=True):
         if g.pos: g.flat()
         trades = [x for x in g.log if "pnl" in x]
         summary = {"종목": g.ticker}
-        if not trades: summary["총 거래 횟수"] = 0
+        if not trades:
+            summary["총 거래 횟수"] = 0
         else:
-            total_pnl, total_fees = sum(x["pnl"] for x in trades), sum(x.get("fee", 0) for x in trades)
-            net_pnl, wins = total_pnl + total_fees, [x for x in trades if x["pnl"] > 0]
+            total_pnl = sum(x["pnl"] for x in trades)
+            total_fees = sum(x.get("fee", 0) for x in trades)
+            net_pnl = total_pnl + total_fees
+            wins = [x for x in trades if x["pnl"] > 0]
             win_rate = len(wins) / len(trades) * 100 if trades else 0
-            summary.update({"최종 순손익": f"${net_pnl:,.2f}", "총 거래 횟수": f"{len(trades)}회", "승률": f"{win_rate:.2f}%"})
+            summary.update({
+                "최종 순손익": f"${net_pnl:,.2f}",
+                "총 거래 횟수": f"{len(trades)}회",
+                "승률": f"{win_rate:.2f}%",
+            })
         st.session_state.last_summary = summary
         st.session_state.pop("game", None)
         st.rerun()
 
+    # 매매 컨트롤
     st.markdown("---")
     st.subheader("매매")
     amount = st.number_input("수량(주)", min_value=1, value=10, step=1)
@@ -185,19 +207,18 @@ with side_col:
     position_pct = (order_value / equity) * 100 if equity > 0 else 0
     st.caption(f"주문 금액: ${order_value:,.2f} (자산의 {position_pct:.1f}%)")
     
-    # [수정] 리스크 계산 로직을 손절매 가격 입력창 위로 이동 및 레이블 변경
-    # 임시 변수를 사용해 현재 입력된 손절매 가격을 가져옴
     temp_stop_loss = st.session_state.get("stop_loss_price", 0.0)
     
+    # 베팅 리스크 계산 및 표시
     if temp_stop_loss > 0:
-        # 롱 포지션 진입을 가정하고 리스크 계산
+        # 매수 시 리스크
         risk_per_share_long = price_now - temp_stop_loss
         if risk_per_share_long > 0:
             total_risk_long = risk_per_share_long * amount
             risk_pct_long = (total_risk_long / equity) * 100 if equity > 0 else 0
             st.caption(f"↳ 베팅 리스크 (매수): ${total_risk_long:,.2f} ({risk_pct_long:.2f}%)")
         
-        # 숏 포지션 진입을 가정하고 리스크 계산
+        # 매도(공매도) 시 리스크
         risk_per_share_short = temp_stop_loss - price_now
         if risk_per_share_short > 0:
             total_risk_short = risk_per_share_short * amount
@@ -206,44 +227,54 @@ with side_col:
 
     st.number_input("손절매 가격", key="stop_loss_price", format="%.2f", step=0.01)
 
+    # 매매 버튼
     b_col, s_col = st.columns(2)
     if b_col.button("매수", use_container_width=True):
         if g.cash >= order_value: g.buy(amount); st.rerun()
         else: st.warning("현금이 부족합니다.")
             
-    if s_col.button("매도/공매도", use_container_width=True): g.sell(amount); st.rerun()
+    if s_col.button("매도/공매도", use_container_width=True):
+        g.sell(amount); st.rerun()
             
     if st.button("전량 청산", use_container_width=True) and g.pos:
         g.flat()
-        st.session_state.stop_loss_price = 0.0
+        st.session_state.stop_loss_price = 0.0 # 청산 시 손절가 초기화
         st.rerun()
     
+    # 차트 설정
     st.markdown("---")
     st.subheader("차트 설정")
-    chart_height = st.slider("차트 높이", min_value=400, max_value=1200, value=800, step=50)
+    chart_height = st.slider("차트 높이", min_value=400, max_value=1200, value=800, step=50, key="chart_height")
 
+
+# -------------- 차트 UI --------------
 with chart_col:
+    # 이동평균선 설정
     ma_cols = st.columns(2)
-    ema_input = ma_cols[0].text_input("EMA 기간(쉼표)", "10,21")
-    sma_input = ma_cols[1].text_input("SMA 기간(쉼표)", "50,200")
-    mas_input = [("EMA", int(p)) for p in ema_input.split(",")] + \
-                [("SMA", int(p)) for p in sma_input.split(",")]
+    ema_input = ma_cols[0].text_input("EMA 기간(쉼표)", st.session_state.ema_input)
+    sma_input = ma_cols[1].text_input("SMA 기간(쉼표)", st.session_state.sma_input)
+    mas_input = [("EMA", int(p.strip())) for p in ema_input.split(",") if p.strip().isdigit()] + \
+                [("SMA", int(p.strip())) for p in sma_input.split(",") if p.strip().isdigit()]
     mas_tuple = tuple(mas_input)
 
+    # 차트 데이터 준비
     df_full = g.df
     visible_df_with_ma = add_cached_indicators(df_full, mas_tuple).iloc[:g.idx + 1]
     df_trade = (visible_df_with_ma.dropna(subset=["Open", "High", "Low", "Close"])
                                   .loc[visible_df_with_ma.Volume > 0]
                                   .assign(i=lambda d: range(len(d))))
 
-    if df_trade.empty: st.error("표시할 데이터가 없습니다."); st.stop()
+    if df_trade.empty:
+        st.error("표시할 데이터가 없습니다."); st.stop()
 
+    # 표시할 캔들 수 설정
     view_n = st.number_input("표시봉", 50, len(df_trade), st.session_state.view_n, 10, label_visibility="collapsed", key="view_n")
 
     start_i = df_trade.i.iloc[max(0, len(df_trade) - view_n)]
     end_i = df_trade.i.iloc[-1]
     sub = df_trade[df_trade.i >= start_i]
     
+    # Y축 범위 계산
     ma_cols_for_range = [f"{k}{p}" for k, p in mas_tuple]
     ymin = sub[["Low"] + ma_cols_for_range].min().min()
     ymax = sub[["High"] + ma_cols_for_range].max().max()
@@ -252,15 +283,19 @@ with chart_col:
     price_yrange = [ymin - span * MARGIN, ymax + span * MARGIN]
     volume_yrange = [0, sub['Volume'].max() * 1.2]
 
+    # 차트 객체 생성
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.02)
     
+    # 이동평균선 그리기
     for i, (k, p) in enumerate(mas_tuple):
         color = MA_COLORS.get((k, p))
         fig.add_scatter(x=df_trade.i, y=df_trade[f"{k}{p}"], line=dict(width=1.5, color=color), name=f"{k}{p}", row=1, col=1)
     
+    # 캔들스틱 및 볼륨 차트 그리기
     fig.add_candlestick(x=df_trade.i, open=df_trade.Open, high=df_trade.High, low=df_trade.Low, close=df_trade.Close, name="Price", row=1, col=1, increasing=dict(line=dict(color="black", width=1), fillcolor="white"), decreasing=dict(line=dict(color="black", width=1), fillcolor="black"))
     fig.add_bar(x=df_trade.i, y=df_trade.Volume, name="Volume", row=2, col=1, marker_color='rgba(128,128,128,0.5)')
     
+    # 매매 기록(화살표) 표시
     log_df = pd.DataFrame(g.log)
     if not log_df.empty:
         log_df = log_df[log_df.action.str.contains("ENTER")]
@@ -273,11 +308,30 @@ with chart_col:
             if not sell_df.empty:
                 fig.add_scatter(x=sell_df['i'], y=sell_df['High'] + span * 0.03, mode="markers", marker=dict(symbol="triangle-down", color="red", size=10), name="Sell", row=1, col=1)
 
-    tick_step = max(len(sub) // 10, 1)
-    fig.update_layout(height=chart_height, xaxis_rangeslider_visible=False, hovermode="x unified", margin=dict(t=25, b=20, l=5, r=40), spikedistance=-1)
+    # ==================================================================
+    # ✨ 새로운 기능: 손절매 가격을 차트에 수평선으로 표시
+    # ==================================================================
+    stop_loss_price = st.session_state.get("stop_loss_price", 0.0)
+    if stop_loss_price > 0:
+        fig.add_hline(
+            y=stop_loss_price,
+            line_dash="dash",      # 점선 스타일
+            line_color="red",      # 선 색상
+            line_width=2,          # 선 두께
+            annotation_text="손절 라인",  # 라인 옆에 표시될 텍스트
+            annotation_position="bottom right", # 텍스트 위치
+            annotation_font_size=12,
+            annotation_font_color="red",
+            row=1, col=1
+        )
+
+    # 차트 레이아웃 설정
+    fig.update_layout(height=st.session_state.chart_height, xaxis_rangeslider_visible=False, hovermode="x unified", margin=dict(t=25, b=20, l=5, r=40), spikedistance=-1)
     fig.update_xaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor", range=[start_i - 1, end_i + PAD])
     fig.update_yaxes(showspikes=True, spikethickness=1, spikecolor="#999999", spikemode="across", spikesnap="cursor")
     fig.update_yaxes(range=price_yrange, row=1, col=1)
     fig.update_yaxes(range=volume_yrange, row=2, col=1)
     
+    # 차트 출력
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
