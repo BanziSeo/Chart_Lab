@@ -312,3 +312,7 @@ if jump_col.button("랜덤 점프", type="secondary", use_container_width=True):
 if model_col.button("모델북 랜덤 교체", type="secondary", use_container_width=True):
     start_random_modelbook(int(g.equity))
 
+new_tkr = side_col.text_input("새 티커 입력", "")
+if side_col.button("티커 변경", type="secondary", use_container_width=True) and new_tkr.strip():
+    start_game(new_tkr.upper(), int(g.equity))
+
