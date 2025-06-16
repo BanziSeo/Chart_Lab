@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 손절선 시각화 대신 '리스크 베팅 금액' 실시간 계산 기능 추가
+# 기능: 리스크 계산 UI/UX 개선
 
 import streamlit as st
 import pandas as pd
@@ -184,27 +184,27 @@ with side_col:
     order_value = amount * price_now
     position_pct = (order_value / equity) * 100 if equity > 0 else 0
     st.caption(f"주문 금액: ${order_value:,.2f} (자산의 {position_pct:.1f}%)")
-
-    st.number_input("손절매 가격", key="stop_loss_price", format="%.2f", step=0.01)
     
-    # [수정] '리스크 베팅 금액' 계산 로직
-    if st.session_state.stop_loss_price > 0:
+    # [수정] 리스크 계산 로직을 손절매 가격 입력창 위로 이동 및 레이블 변경
+    # 임시 변수를 사용해 현재 입력된 손절매 가격을 가져옴
+    temp_stop_loss = st.session_state.get("stop_loss_price", 0.0)
+    
+    if temp_stop_loss > 0:
         # 롱 포지션 진입을 가정하고 리스크 계산
-        risk_per_share_long = price_now - st.session_state.stop_loss_price
-        total_risk_long = risk_per_share_long * amount
-        risk_pct_long = (total_risk_long / equity) * 100 if equity > 0 else 0
+        risk_per_share_long = price_now - temp_stop_loss
+        if risk_per_share_long > 0:
+            total_risk_long = risk_per_share_long * amount
+            risk_pct_long = (total_risk_long / equity) * 100 if equity > 0 else 0
+            st.caption(f"↳ 베팅 리스크 (매수): ${total_risk_long:,.2f} ({risk_pct_long:.2f}%)")
         
         # 숏 포지션 진입을 가정하고 리스크 계산
-        risk_per_share_short = st.session_state.stop_loss_price - price_now
-        total_risk_short = risk_per_share_short * amount
-        risk_pct_short = (total_risk_short / equity) * 100 if equity > 0 else 0
-        
-        # 매수/매도 버튼에 맞춰서 적절한 리스크 표시
-        if risk_per_share_long > 0:
-            st.caption(f"↳ 매수 시 리스크: ${total_risk_long:,.2f} ({risk_pct_long:.2f}%)")
+        risk_per_share_short = temp_stop_loss - price_now
         if risk_per_share_short > 0:
-             st.caption(f"↳ 매도 시 리스크: ${total_risk_short:,.2f} ({risk_pct_short:.2f}%)")
+            total_risk_short = risk_per_share_short * amount
+            risk_pct_short = (total_risk_short / equity) * 100 if equity > 0 else 0
+            st.caption(f"↳ 베팅 리스크 (매도): ${total_risk_short:,.2f} ({risk_pct_short:.2f}%)")
 
+    st.number_input("손절매 가격", key="stop_loss_price", format="%.2f", step=0.01)
 
     b_col, s_col = st.columns(2)
     if b_col.button("매수", use_container_width=True):
