@@ -1,5 +1,5 @@
-# app.py (Ver. 2.4)
-# 기능: 매매 버튼 클릭 시 발생하는 AttributeError 수정 및 상태 관리 안정성 강화
+# app.py (Ver. 2.5)
+# 기능: '표시봉' number_input 위젯의 인자 오류 수정
 
 import streamlit as st
 import pandas as pd
@@ -46,9 +46,6 @@ def reset_session_state():
     st.session_state.ema_input = "10,21"
     st.session_state.sma_input = "50,200"
 
-# ==================================================================
-# ✨ 새로운 기능: 상태 초기화 안정성 강화 함수
-# ==================================================================
 def initialize_state_if_missing():
     """세션 상태의 키가 비정상적으로 사라졌을 경우를 대비해 기본값으로 다시 초기화합니다."""
     defaults = {
@@ -156,7 +153,7 @@ if "game" not in st.session_state:
 
 # ---------------------------------- 메인 게임 화면 ----------------------------------
 g: GameState = st.session_state.game
-initialize_state_if_missing() # 상태 초기화 함수 호출로 안정성 확보
+initialize_state_if_missing() 
 chart_col, side_col = st.columns([7, 3])
 
 # -------------- 사이드바 UI --------------
@@ -272,7 +269,6 @@ with side_col:
     
     st.markdown("---")
     st.subheader("차트 설정")
-    # 위젯의 key와 session_state를 일치시켜 상태 관리 오류를 해결합니다.
     st.slider("차트 높이", min_value=400, max_value=1200, step=50, key="chart_height")
 
 # -------------- 차트 UI --------------
@@ -292,7 +288,17 @@ with chart_col:
 
     if df_trade.empty: st.error("표시할 데이터가 없습니다."); st.stop()
 
-    st.number_input("표시봉", 50, len(df_trade), 10, key="view_n", label_visibility="collapsed")
+    # ==================================================================
+    # ✨ 버그 수정: number_input의 인자를 명시적으로 지정하여 오류 해결
+    # ==================================================================
+    st.number_input(
+        "표시봉",
+        min_value=50,
+        max_value=len(df_trade),
+        step=10,
+        key="view_n",
+        label_visibility="collapsed"
+    )
     view_n = st.session_state.view_n
 
     start_i = df_trade.i.iloc[max(0, len(df_trade) - view_n)]
