@@ -1,5 +1,5 @@
 # app.py (최종 통합본)
-# 기능: 렌더링 구조를 변경하여 손절선 표시 오류 최종 해결
+# 기능: NameError 수정 및 모든 기능 통합
 
 import streamlit as st
 import pandas as pd
@@ -132,8 +132,9 @@ if "game" not in st.session_state:
     st.stop()
 
 # ---------------------------------- 메인 게임 화면 ----------------------------------
-# 1단계: 모든 사용자 입력 및 상태를 먼저 정의
 g: GameState = st.session_state.game
+# [수정] 실수로 삭제되었던 st.columns 정의 라인 복원
+chart_col, side_col = st.columns([7, 3])
 
 # 세션 상태 초기화
 for key, default_value in {
@@ -216,7 +217,6 @@ with side_col:
     st.subheader("차트 설정")
     st.slider("차트 높이", min_value=400, max_value=1200, value=st.session_state.chart_height, step=50, key="chart_height")
 
-# 2단계: 데이터 준비
 with chart_col:
     ma_cols = st.columns(2)
     ma_cols[0].text_input("EMA 기간(쉼표)", key="ema_input")
@@ -247,10 +247,9 @@ with chart_col:
         ymax = max(ymax, st.session_state.stop_loss_price)
 
     span = ymax - ymin if ymax > ymin else 1
-    price_yrange = [ymin - span * MARGIN, ymax - span * MARGIN]
+    price_yrange = [ymin - span * MARGIN, ymax + span * MARGIN] # 오타 수정
     volume_yrange = [0, sub['Volume'].max() * 1.2]
 
-# 3단계: 차트 그리기
 with chart_col:
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.02)
     
