@@ -1,6 +1,5 @@
-# app.py (Ver. 3.5)
-# 기능: 1. '전량 청산' 시 투자 원금이 사라지는 치명적인 버그를 수정.
-#      2. 자금 관리 로직을 안정화.
+# app.py (Ver. 4.1)
+# 기능: 1. '표시봉' 라벨을 '캔들 수'로 변경.
 
 import streamlit as st
 import pandas as pd
@@ -83,24 +82,16 @@ class GameState:
         price_now = self.df.Close.iloc[self.idx]
         self.pos = Position("short", qty, price_now, self.pos)
         self.log.append({"date": self.today, "action": "ENTER SHORT", "price": price_now, "qty": qty})
-        
     def flat(self):
         if not self.pos: return
         price_now = self.df.Close.iloc[self.idx]
         pnl = self.pos.close(price_now)
         trade_value = self.pos.qty * price_now
         fee = trade_value * 0.0014
-
-        # ==================================================================
-        # ✨ 치명적 버그 수정: 청산 시 자금 계산 로직 수정
-        # ==================================================================
         if self.pos.side == 'long':
-            # Long 포지션 청산: (매도한 금액 - 수수료) 만큼 현금 증가
             self.cash += trade_value - fee
         else: # short
-            # Short 포지션 청산: (실현 손익 - 수수료) 만큼 현금 변동
             self.cash += pnl - fee
-        
         self.log.append({"date": self.today, "action": "EXIT", "price": price_now, "pnl": pnl, "fee": -fee})
         self.pos = None
 
@@ -219,42 +210,59 @@ with side_col:
     st.metric("현재 평가자산", f"${equity:,.2f}", f"${unreal:,.2f} 미실현")
     st.text(f"현금: ${g.cash:,.2f}")
     st.text(f"현재가(종가): ${price_now:,.2f}")
-    if g.pos:
-        st.text(f"포지션: {g.pos.side.upper()} {g.pos.qty}주 @ ${g.pos.avg_price:,.2f}")
-
-    with st.expander("📖 모델북 차트 게임 설명서"):
-        st.markdown("""
-        **1) 게임 진행**
-        - **▶ 다음**: 다음 날의 캔들로 이동합니다. 한 게임은 최대 80개의 캔들로 구성됩니다.
-        - **🎲 날짜 변경**: 현재 종목 내에서 다른 시작 시점으로 무작위 이동합니다.
-        - **📚 모델북**: `modelbook.txt`에 등록된 다른 종목으로 새로운 게임을 시작합니다.
-        - **종료 & 결과**: 게임을 끝내고 성과를 분석합니다. 종목명과 해당 차트의 연도가 공개됩니다.
-        
-        **2) 차트 상호작용**
-        - **줌인/아웃**: 차트 영역을 더블클릭하면 전체 기간이 표시되고, 다시 더블클릭하면 원래대로 돌아옵니다.
-        - **설정**: 이동평균선(EMA, SMA), 표시 캔들 수, 차트 높이를 직접 조절할 수 있습니다.
-        """)
+    if g.pos: st.text(f"포지션: {g.pos.side.upper()} {g.pos.qty}주 @ ${g.pos.avg_price:,.2f}")
 
     st.markdown("---")
-    st.subheader("게임 진행")
     
+    # ✨ UI 개편: 매매 섹션 재구성
+    st.subheader("매매 및 진행")
     st.progress(g.candles_passed / (g.max_duration -1) if g.max_duration > 1 else 1, text=f"{g.candles_passed + 1} / {g.max_duration} 캔들")
 
+    amount = st.number_input("수량(주)", min_value=1, value=10, step=1)
+    st.number_input("손절매 가격", key="stop_loss_price", format="%.2f", step=0.01)
+    
+    st.caption(f"주문 금액: ${amount * price_now:,.2f} (자산의 {(amount * price_now / equity) * 100 if equity > 0 else 0:.1f}%)")
+    if st.session_state.stop_loss_price > 0:
+        risk_per_share_long = price_now - st.session_state.stop_loss_price
+        if risk_per_share_long > 0:
+            total_risk = risk_per_share_long * amount
+            st.caption(f"↳ 베팅 리스크 (매수): ${total_risk:,.2f} (자산의 {(total_risk / equity) * 100 if equity > 0 else 0:.2f}%)")
+        risk_per_share_short = st.session_state.stop_loss_price - price_now
+        if risk_per_share_short > 0:
+            total_risk = risk_per_share_short * amount
+            st.caption(f"↳ 베팅 리스크 (매도): ${total_risk:,.2f} (자산의 {(total_risk / equity) * 100 if equity > 0 else 0:.2f}%)")
+    
+    def on_click_buy(qty): g.buy(qty)
+    def on_click_sell(qty): g.sell(qty)
+    def on_click_flat(): g.flat(); st.session_state.stop_loss_price = 0.0
     def on_click_next():
         g.next_candle()
         if not g.pos: st.session_state.stop_loss_price = 0.0
+        
+    b_col, s_col = st.columns(2)
+    can_buy = g.cash >= (amount * price_now)
+    b_col.button("매수 (Long)", use_container_width=True, on_click=on_click_buy, args=(amount,), disabled=not can_buy)
+    s_col.button("매도 (Short)", use_container_width=True, on_click=on_click_sell, args=(amount,))
+    if not can_buy: b_col.caption("현금이 부족합니다.")
+
+    n_col, f_col = st.columns(2)
+    n_col.button("▶ 다음 캔들", use_container_width=True, on_click=on_click_next, disabled=g.is_over, type="primary")
+    f_col.button("전량 청산", use_container_width=True, on_click=on_click_flat, disabled=not g.pos)
+    
+    st.markdown("---")
+
+    # ✨ UI 개편: 게임 관리 섹션 신설
+    st.subheader("게임 관리")
     def on_click_jump(): jump_random_date()
     def on_click_modelbook(): start_random_modelbook(g.initial_cash)
-        
-    n_col, j_col, r_col = st.columns(3)
-    n_col.button("▶ 다음", use_container_width=True, on_click=on_click_next, disabled=g.is_over)
-    j_col.button("🎲 날짜 변경", use_container_width=True, on_click=on_click_jump)
-    r_col.button("📚 모델북", use_container_width=True, on_click=on_click_modelbook)
     
-    if g.is_over:
-        st.info("최대 캔들 수에 도달했습니다. 게임을 종료하고 결과를 확인하세요.")
+    j_col, m_col = st.columns(2)
+    j_col.button("🎲 날짜 변경", use_container_width=True, on_click=on_click_jump)
+    m_col.button("📚 모델북", use_container_width=True, on_click=on_click_modelbook)
+    
+    if g.is_over: st.info("최대 캔들 수에 도달했습니다. 게임을 종료하고 결과를 확인하세요.")
 
-    if st.button("게임 종료 & 결과 보기", type="primary", use_container_width=True):
+    if st.button("게임 종료 & 결과 보기", type="secondary", use_container_width=True):
         if g.pos: g.flat()
         trades = [x for x in g.log if "pnl" in x]
         year = g.start_date.year
@@ -271,42 +279,27 @@ with side_col:
         st.session_state.pop("game", None)
         st.rerun()
 
-    st.markdown("---")
-    st.subheader("매매")
-    amount = st.number_input("수량(주)", min_value=1, value=10, step=1)
-    order_value = amount * price_now
-    st.caption(f"주문 금액: ${order_value:,.2f} (자산의 {(order_value / equity) * 100 if equity > 0 else 0:.1f}%)")
-    if st.session_state.stop_loss_price > 0:
-        risk_per_share_long = price_now - st.session_state.stop_loss_price
-        if risk_per_share_long > 0:
-            total_risk = risk_per_share_long * amount
-            st.caption(f"↳ 베팅 리스크 (매수): ${total_risk:,.2f} (자산의 {(total_risk / equity) * 100 if equity > 0 else 0:.2f}%)")
-        risk_per_share_short = st.session_state.stop_loss_price - price_now
-        if risk_per_share_short > 0:
-            total_risk = risk_per_share_short * amount
-            st.caption(f"↳ 베팅 리스크 (매도): ${total_risk:,.2f} (자산의 {(total_risk / equity) * 100 if equity > 0 else 0:.2f}%)")
-    st.number_input("손절매 가격", key="stop_loss_price", format="%.2f", step=0.01)
-    
-    def on_click_buy(qty): g.buy(qty)
-    def on_click_sell(qty): g.sell(qty)
-    def on_click_flat(): g.flat(); st.session_state.stop_loss_price = 0.0
-
-    b_col, s_col = st.columns(2)
-    can_buy = g.cash >= order_value
-    b_col.button("매수", use_container_width=True, on_click=on_click_buy, args=(amount,), disabled=not can_buy)
-    s_col.button("매도/공매도", use_container_width=True, on_click=on_click_sell, args=(amount,))
-    if not can_buy: b_col.caption("현금이 부족합니다.")
-    st.button("전량 청산", use_container_width=True, on_click=on_click_flat, disabled=not g.pos)
-    
-    st.markdown("---")
-    st.subheader("차트 설정")
-    st.slider("차트 높이", min_value=400, max_value=1200, step=50, key="chart_height")
+    with st.expander("📖 게임 설명서"):
+        st.markdown("""
+        **1) 매매 및 진행**
+        - **▶ 다음 캔들**: 다음 날의 캔들로 이동합니다. (게임당 최대 80개)
+        - **전량 청산**: 보유한 모든 포지션을 즉시 종료합니다.
+        
+        **2) 게임 관리**
+        - **🎲 날짜 변경**: 현재 종목 내에서 다른 시작 시점으로 무작위 이동합니다.
+        - **📚 모델북**: `modelbook.txt`에 등록된 다른 종목으로 새로운 게임을 시작합니다.
+        - **게임 종료 & 결과**: 게임을 끝내고 성과를 분석합니다.
+        """)
 
 # -------------- 차트 UI --------------
 with chart_col:
-    ma_cols = st.columns(2)
-    st.text_input("EMA 기간(쉼표)", key="ema_input")
-    st.text_input("SMA 기간(쉼표)", key="sma_input")
+    # ✨ UI 개편: 차트 설정 UI 변경
+    with st.expander("차트 설정"):
+        c1, c2, c3 = st.columns([2,2,1])
+        c1.text_input("EMA 기간 (쉼표)", key="ema_input")
+        c2.text_input("SMA 기간 (쉼표)", key="sma_input")
+        c3.slider("차트 높이", min_value=400, max_value=1200, step=50, key="chart_height")
+
     mas_input = [("EMA", int(p.strip())) for p in st.session_state.ema_input.split(",") if p.strip().isdigit()] + \
                 [("SMA", int(p.strip())) for p in st.session_state.sma_input.split(",") if p.strip().isdigit()]
     mas_tuple = tuple(mas_input)
@@ -319,18 +312,13 @@ with chart_col:
 
     max_candles = len(df_trade)
     min_candles = 10 
-
-    if max_candles < min_candles:
-        min_candles = max_candles
-    
-    if 'view_n' not in st.session_state or st.session_state.view_n is None:
-        st.session_state.view_n = DEFAULT_VIEW_CANDLES
-    
+    if max_candles < min_candles: min_candles = max_candles
+    if 'view_n' not in st.session_state or st.session_state.view_n is None: st.session_state.view_n = DEFAULT_VIEW_CANDLES
     st.session_state.view_n = max(min_candles, min(st.session_state.view_n, max_candles))
     
     st.number_input(
-        "표시봉", min_value=min_candles, max_value=max_candles,
-        step=10, key="view_n", label_visibility="collapsed"
+        "캔들 수", min_value=min_candles, max_value=max_candles, # ✨ UI 수정: '표시봉' -> '캔들 수'
+        step=10, key="view_n"
     )
     view_n = st.session_state.view_n
 
